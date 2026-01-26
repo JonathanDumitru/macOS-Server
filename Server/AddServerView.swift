@@ -11,11 +11,14 @@ import SwiftData
 struct AddServerView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    
+
+    @Query(sort: \ServerGroup.sortOrder) private var groups: [ServerGroup]
+
     @State private var name = ""
     @State private var host = ""
     @State private var port = 80
     @State private var serverType: ServerType = .http
+    @State private var selectedGroup: ServerGroup?
     @State private var notes = ""
     
     var isValid: Bool {
@@ -48,8 +51,23 @@ struct AddServerView: View {
                                 .tag(type)
                         }
                     }
+
+                    if !groups.isEmpty {
+                        Picker("Group", selection: $selectedGroup) {
+                            Text("None").tag(nil as ServerGroup?)
+                            ForEach(groups) { group in
+                                HStack {
+                                    Circle()
+                                        .fill(group.color)
+                                        .frame(width: 8, height: 8)
+                                    Text(group.name)
+                                }
+                                .tag(group as ServerGroup?)
+                            }
+                        }
+                    }
                 }
-                
+
                 Section("Notes (Optional)") {
                     TextEditor(text: $notes)
                         .frame(minHeight: 100)
@@ -104,7 +122,8 @@ struct AddServerView: View {
             serverType: serverType,
             notes: notes
         )
-        
+        newServer.group = selectedGroup
+
         modelContext.insert(newServer)
         dismiss()
     }

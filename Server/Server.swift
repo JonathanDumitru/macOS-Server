@@ -24,9 +24,12 @@ final class Server {
     // Relationships
     @Relationship(deleteRule: .cascade, inverse: \ServerMetric.server)
     var metrics: [ServerMetric] = []
-    
+
     @Relationship(deleteRule: .cascade, inverse: \ServerLog.server)
     var logs: [ServerLog] = []
+
+    // Group relationship (optional - server may not belong to a group)
+    var group: ServerGroup?
     
     init(
         id: UUID = UUID(),

@@ -15,6 +15,7 @@ struct ServerApp: App {
             Server.self,
             ServerMetric.self,
             ServerLog.self,
+            ServerGroup.self,
             Item.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)

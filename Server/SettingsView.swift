@@ -23,7 +23,12 @@ struct SettingsView: View {
             .tabItem {
                 Label("General", systemImage: "gear")
             }
-            
+
+            GroupSettingsView()
+            .tabItem {
+                Label("Groups", systemImage: "folder.fill")
+            }
+
             NotificationSettingsView(
                 enableNotifications: $enableNotifications,
                 notifyOnStatusChange: $notifyOnStatusChange,
@@ -32,7 +37,7 @@ struct SettingsView: View {
             .tabItem {
                 Label("Notifications", systemImage: "bell")
             }
-            
+
             DataSettingsView(
                 maxLogEntries: $maxLogEntries,
                 maxMetricEntries: $maxMetricEntries
@@ -41,7 +46,7 @@ struct SettingsView: View {
                 Label("Data", systemImage: "cylinder")
             }
         }
-        .frame(width: 500, height: 400)
+        .frame(width: 500, height: 450)
     }
 }
 

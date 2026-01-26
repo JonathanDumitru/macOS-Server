@@ -31,15 +31,21 @@ struct ServerListItemView: View {
             }
             
             VStack(alignment: .leading, spacing: 3) {
-                Text(server.name)
-                    .font(.system(size: 13, weight: .semibold))
-                    .lineLimit(1)
-                
+                HStack(spacing: 6) {
+                    Text(server.name)
+                        .font(.system(size: 13, weight: .semibold))
+                        .lineLimit(1)
+
+                    if server.group != nil {
+                        ServerGroupBadge(group: server.group, size: .small)
+                    }
+                }
+
                 HStack(spacing: 6) {
                     Text("\(server.host):\(server.port)")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
-                    
+
                     if let responseTime = server.responseTime {
                         Text("•")
                             .font(.system(size: 11))

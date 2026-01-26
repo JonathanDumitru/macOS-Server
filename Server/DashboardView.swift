@@ -355,18 +355,29 @@ struct NavigationContentView: View {
     let monitoringService: ServerMonitoringService
     let modelContext: ModelContext
     @Bindable var appModel: AppModel
-    
+
+    @Query(sort: \ServerGroup.sortOrder) private var groups: [ServerGroup]
     @State private var selectedServer: Server?
     @State private var searchText = ""
-    
+    @State private var selectedGroupFilter: ServerGroup?
+
     var filteredServers: [Server] {
-        if searchText.isEmpty {
-            return servers
+        var result = servers
+
+        // Filter by group
+        if let group = selectedGroupFilter {
+            result = result.filter { $0.group?.id == group.id }
         }
-        return servers.filter { server in
-            server.name.localizedCaseInsensitiveContains(searchText) ||
-            server.host.localizedCaseInsensitiveContains(searchText)
+
+        // Filter by search text
+        if !searchText.isEmpty {
+            result = result.filter { server in
+                server.name.localizedCaseInsensitiveContains(searchText) ||
+                server.host.localizedCaseInsensitiveContains(searchText)
+            }
         }
+
+        return result
     }
     
     var body: some View {
@@ -375,19 +386,57 @@ struct NavigationContentView: View {
             case .dashboard:
                 if selectedServer != nil {
                     NavigationStack {
-                        List(filteredServers, selection: $selectedServer) { server in
-                            NavigationLink(value: server) {
-                                ServerListItemView(server: server)
-                            }
-                            .contextMenu {
-                                Button("Check Now") {
-                                    Task {
-                                        await monitoringService.checkServer(server)
-                                    }
-                                }
+                        VStack(spacing: 0) {
+                            // Group Filter Bar
+                            if !groups.isEmpty {
+                                GroupFilterBar(groups: groups, selectedGroup: $selectedGroupFilter)
+                                    .background(Color(nsColor: .windowBackgroundColor))
                                 Divider()
-                                Button("Delete", role: .destructive) {
-                                    deleteServer(server)
+                            }
+
+                            List(filteredServers, selection: $selectedServer) { server in
+                                NavigationLink(value: server) {
+                                    ServerListItemView(server: server)
+                                }
+                                .contextMenu {
+                                    Button("Check Now") {
+                                        Task {
+                                            await monitoringService.checkServer(server)
+                                        }
+                                    }
+
+                                    Divider()
+
+                                    // Group assignment menu
+                                    Menu("Assign to Group") {
+                                        Button("None") {
+                                            server.group = nil
+                                        }
+
+                                        if !groups.isEmpty {
+                                            Divider()
+                                        }
+
+                                        ForEach(groups) { group in
+                                            Button {
+                                                server.group = group
+                                            } label: {
+                                                HStack {
+                                                    Image(systemName: group.icon)
+                                                    Text(group.name)
+                                                    if server.group?.id == group.id {
+                                                        Image(systemName: "checkmark")
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Divider()
+
+                                    Button("Delete", role: .destructive) {
+                                        deleteServer(server)
+                                    }
                                 }
                             }
                         }

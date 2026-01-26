@@ -10,6 +10,32 @@ import SwiftData
 
 struct SampleData {
     static func createSampleServers(in context: ModelContext) {
+        // Create sample groups first
+        let productionGroup = ServerGroup(
+            name: "Production",
+            colorHex: "#34C759",
+            icon: "server.rack",
+            sortOrder: 0
+        )
+
+        let stagingGroup = ServerGroup(
+            name: "Staging",
+            colorHex: "#FF9500",
+            icon: "flask.fill",
+            sortOrder: 1
+        )
+
+        let developmentGroup = ServerGroup(
+            name: "Development",
+            colorHex: "#007AFF",
+            icon: "wrench.and.screwdriver.fill",
+            sortOrder: 2
+        )
+
+        context.insert(productionGroup)
+        context.insert(stagingGroup)
+        context.insert(developmentGroup)
+
         // Web Servers
         let webServer1 = Server(
             name: "Production Web Server",
@@ -86,6 +112,16 @@ struct SampleData {
             notes: "SSH gateway for remote server access"
         )
         
+        // Assign servers to groups
+        webServer1.group = productionGroup
+        apiServer.group = productionGroup
+        dbServer.group = productionGroup
+
+        webServer2.group = stagingGroup
+
+        ftpServer.group = developmentGroup
+        sshServer.group = developmentGroup
+
         context.insert(webServer1)
         context.insert(webServer2)
         context.insert(apiServer)
