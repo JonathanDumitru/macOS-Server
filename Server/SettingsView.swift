@@ -57,7 +57,9 @@ struct SettingsView: View {
 
 struct GeneralSettingsView: View {
     @Binding var monitoringInterval: Int
-    
+    @AppStorage("showMenuBarExtra") private var showMenuBarExtra = true
+    @AppStorage("launchAtLogin") private var launchAtLogin = false
+
     var body: some View {
         Form {
             Section {
@@ -68,12 +70,33 @@ struct GeneralSettingsView: View {
                     Text("2 minutes").tag(120)
                     Text("5 minutes").tag(300)
                 }
-                
+
                 Text("How often to check server status")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {
                 Text("Monitoring")
+            }
+
+            Section {
+                Toggle("Show in Menu Bar", isOn: $showMenuBarExtra)
+
+                Text("Display a menu bar icon with quick access to server status")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Menu Bar")
+            }
+
+            Section {
+                Toggle("Launch at Login", isOn: $launchAtLogin)
+                    .disabled(true) // Would need SMAppService to implement
+
+                Text("Start Server Monitor when you log in (coming soon)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Startup")
             }
         }
         .formStyle(.grouped)

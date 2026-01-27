@@ -12,6 +12,7 @@ import UserNotifications
 @main
 struct ServerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @AppStorage("showMenuBarExtra") private var showMenuBarExtra = true
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -45,6 +46,13 @@ struct ServerApp: App {
         Settings {
             SettingsView()
         }
+
+        // Menu Bar Extra
+        MenuBarExtra("Server Monitor", systemImage: "server.rack") {
+            MenuBarView()
+                .modelContainer(sharedModelContainer)
+        }
+        .menuBarExtraStyle(.window)
         #endif
     }
 }
