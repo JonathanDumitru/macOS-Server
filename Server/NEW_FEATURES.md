@@ -1,6 +1,6 @@
 # New Features Documentation
 
-This document details the 9 advanced features implemented in Server Monitor Dashboard.
+This document details the 15 features implemented in Server Monitor Dashboard (9 advanced features + 6 quick wins + 4 medium effort features).
 
 ---
 
@@ -525,3 +525,238 @@ static var schema: Schema {
 - [ ] Menu bar shows correct counts
 - [ ] Credentials save to Keychain
 - [ ] SSH metrics collect (if sshpass available)
+
+---
+
+## Feature 10: Historical Charts
+
+### Overview
+Comprehensive metrics visualization with time range selection and trend analysis.
+
+### Files Created
+- `HistoricalChartsView.swift` - Main charting view
+
+### Files Modified
+- `ServerDetailView.swift` - Added History tab
+
+### Time Ranges
+| Range | Description |
+|-------|-------------|
+| 1H | Last hour |
+| 6H | Last 6 hours |
+| 24H | Last 24 hours |
+| 7D | Last 7 days |
+| 30D | Last 30 days |
+
+### Metric Types
+- Response Time (ms)
+- CPU Usage (%)
+- Memory Usage (%)
+- Disk Usage (%)
+- Uptime (%)
+
+### Features
+- Interactive Swift Charts visualization
+- Stats summary (avg/min/max)
+- Trend analysis and insights
+- Color-coded data points
+- Time-based filtering
+
+### Usage
+Navigate to Server Detail → History tab to view charts.
+
+---
+
+## Feature 11: Server Templates
+
+### Overview
+Predefined server configurations for quick setup with 20 built-in templates.
+
+### Files Created
+- `ServerTemplate.swift` - SwiftData model
+- `ServerTemplatesView.swift` - Template selection UI
+
+### Files Modified
+- `AddServerView.swift` - Template selector integration
+- `ServerApp.swift` - Schema registration
+
+### Built-in Templates
+| Category | Templates |
+|----------|-----------|
+| Web Servers | HTTP, HTTPS, Nginx, Apache |
+| Databases | MySQL, PostgreSQL, MongoDB, Redis, Elasticsearch |
+| Cache/Queue | Redis, Memcached, RabbitMQ, Kafka |
+| Monitoring | Prometheus, Grafana, Zabbix |
+| Other | SSH, FTP, SMTP, DNS, Docker, Kubernetes |
+
+### Data Model
+```swift
+@Model
+final class ServerTemplate {
+    var id: UUID
+    var name: String
+    var serverType: ServerType
+    var defaultPort: Int
+    var iconName: String
+    var colorHex: String
+    var isBuiltIn: Bool
+    var defaultTags: String
+    var defaultNotes: String
+}
+```
+
+### Usage
+1. Open Add Server dialog
+2. Select from Quick Start template grid
+3. Template auto-fills port, type, and tags
+4. Customize as needed
+
+---
+
+## Feature 12: Maintenance Windows
+
+### Overview
+Schedule alert silence periods for planned maintenance.
+
+### Files Created
+- `MaintenanceWindow.swift` - SwiftData model
+- `MaintenanceWindowsView.swift` - Management UI
+
+### Files Modified
+- `ServerApp.swift` - Schema registration
+
+### Recurrence Types
+| Type | Schedule |
+|------|----------|
+| None | One-time window |
+| Daily | Every day at same time |
+| Weekdays | Monday through Friday |
+| Weekends | Saturday and Sunday |
+| Weekly | Same day each week |
+| Monthly | Same day each month |
+
+### Data Model
+```swift
+@Model
+final class MaintenanceWindow {
+    var id: UUID
+    var name: String
+    var windowDescription: String
+    var startDate: Date
+    var endDate: Date
+    var isRecurring: Bool
+    var recurrenceType: RecurrenceType
+    var isEnabled: Bool
+    var server: Server?  // nil = global/all servers
+}
+```
+
+### Features
+- Global or per-server scope
+- Active/Scheduled/Recurring/Completed sections
+- Enable/disable toggle
+- Edit and delete support
+- Duration display
+
+### Usage
+1. Navigate to Settings → Maintenance Windows
+2. Click "Add Window"
+3. Configure name, schedule, and scope
+4. Enable recurring if needed
+
+---
+
+## Feature 13: Import from File
+
+### Overview
+Import servers from JSON, CSV, or SSH config files.
+
+### Files Created
+- `ImportView.swift` - Import UI with preview
+
+### Files Modified
+- `DashboardView.swift` - Import sheet integration
+- `ServerApp.swift` - Menu item and notification
+
+### Import Sources
+| Source | Format |
+|--------|--------|
+| JSON | Server Monitor export format |
+| CSV | Name, Host, Port, Type, Status columns |
+| SSH Config | ~/.ssh/config file |
+
+### Features
+- Duplicate detection with skip option
+- Preview imported servers before confirming
+- Select/deselect individual servers
+- SSH config parser for Host, HostName, Port, User
+
+### Keyboard Shortcut
+`⌘⇧I` - Open Import dialog
+
+### CSV Format
+```csv
+Name,Host,Port,Type,Status
+Production Web,prod.example.com,443,https,online
+Database,db.example.com,5432,database,online
+```
+
+### SSH Config Parsing
+```
+Host myserver
+    HostName 192.168.1.100
+    Port 22
+    User admin
+```
+
+### Usage
+1. Press ⌘⇧I or use File → Import Servers
+2. Select import source (JSON/CSV/SSH Config)
+3. Choose file or load SSH config
+4. Review and select servers to import
+5. Click Import
+
+---
+
+## Quick Wins (Features 14-19)
+
+### Feature 14: Server Search/Filter
+- Search bar in dashboard sidebar
+- Filter by name, host, tags, or group
+- Real-time filtering
+
+### Feature 15: Bulk Actions
+- Select mode toggle
+- Bulk delete with confirmation
+- Bulk move to group
+- Bulk export
+
+### Feature 16: Dark/Light Theme Toggle
+- Settings → General → Appearance
+- System/Light/Dark options
+- Persisted with @AppStorage
+
+### Feature 17: Export Server List
+- Export to JSON (pretty-printed)
+- Export to CSV (spreadsheet-compatible)
+- Export all or selected servers
+
+### Feature 18: Keyboard Shortcuts
+| Shortcut | Action |
+|----------|--------|
+| ⌘N | Add new server |
+| ⌘R | Refresh all servers |
+| ⌘⇧M | Toggle monitoring |
+| ⌘⇧E | Export servers |
+| ⌘⇧I | Import servers |
+| ⌘F | Focus search |
+| ⌘1-6 | Navigate sections |
+
+### Feature 19: Quick Actions Context Menu
+Right-click on server for:
+- Check Now
+- Copy Host / Copy Host:Port
+- Open in Browser
+- Open SSH in Terminal
+- Export Server
+- Delete

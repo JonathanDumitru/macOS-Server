@@ -90,67 +90,79 @@ Right-click context menu for servers:
 
 ---
 
-## Medium Effort Features
+## Implemented Medium Effort Features
 
-### 7. Historical Charts
-**Priority:** High
-**Effort:** 4-6 hours
+### 7. Historical Charts ✅
+**Status:** Implemented
 
-- 24-hour response time chart
-- 7-day uptime chart
-- CPU/Memory trend over time
-- Interactive tooltips
-- Zoom and pan
+- Time range selection: 1H, 6H, 24H, 7D, 30D
+- Metric types: Response Time, CPU, Memory, Disk, Uptime
+- Stats summary with avg/min/max values
+- Trend analysis and insights
+- Integrated as History tab in ServerDetailView
 
 **New files:**
 - `HistoricalChartsView.swift`
 
-**Files to modify:**
+**Files modified:**
 - `ServerDetailView.swift`
-- `ServerMetric.swift` (ensure proper timestamps)
 
 ---
 
-### 8. Server Templates
-**Priority:** Medium
-**Effort:** 3-4 hours
+### 8. Server Templates ✅
+**Status:** Implemented
 
-Predefined configurations:
-- Web Server (HTTP/HTTPS, port 80/443)
-- Database (MySQL 3306, PostgreSQL 5432)
-- SSH Server (port 22)
-- Custom template creation
+- 20 built-in templates for common server types
+- Categories: Web Servers, Databases, Cache/Queue, Monitoring, etc.
+- Custom template creation support
+- Template selector integrated into AddServerView
+- Automatic port and type configuration
 
 **New files:**
 - `ServerTemplate.swift`
-- `TemplateManagementView.swift`
+- `ServerTemplatesView.swift`
 
-**Files to modify:**
+**Files modified:**
 - `AddServerView.swift`
 
 ---
 
-### 9. Maintenance Windows
-**Priority:** Medium
-**Effort:** 4-5 hours
+### 9. Maintenance Windows ✅
+**Status:** Implemented
 
 - Schedule maintenance periods
-- Silence notifications during window
-- Recurring schedules (daily, weekly)
-- Per-server or global windows
+- Recurrence types: Daily, Weekdays, Weekends, Weekly, Monthly
+- Global or per-server scope
+- Full CRUD UI with status tracking
+- Active/Scheduled/Recurring/Completed sections
 
 **New files:**
 - `MaintenanceWindow.swift`
-- `MaintenanceScheduleView.swift`
-
-**Files to modify:**
-- `NotificationService.swift`
-- `ServerMonitoringService.swift`
-- `SettingsView.swift`
+- `MaintenanceWindowsView.swift`
 
 ---
 
-### 10. Custom Status Pages
+### 10. Import from File ✅
+**Status:** Implemented
+
+- Import from JSON, CSV, or SSH config files
+- Duplicate detection with skip option
+- Preview imported servers before confirming
+- Menu bar shortcut (⌘⇧I)
+- SSH config parser for ~/.ssh/config
+
+**New files:**
+- `ImportView.swift`
+
+**Files modified:**
+- `DashboardView.swift`
+- `ServerApp.swift`
+
+---
+
+## Remaining Medium Effort Features
+
+### 11. Custom Status Pages
 **Priority:** Low
 **Effort:** 6-8 hours
 
@@ -163,23 +175,6 @@ Predefined configurations:
 **New files:**
 - `StatusPageService.swift`
 - `StatusPageView.swift`
-
----
-
-### 11. Import from File
-**Priority:** Medium
-**Effort:** 3-4 hours
-
-Import servers from:
-- JSON file
-- CSV file
-- SSH config file (~/.ssh/config)
-- Validation before import
-- Duplicate detection
-
-**New files:**
-- `ImportService.swift`
-- `ImportView.swift`
 
 ---
 
@@ -345,20 +340,23 @@ Define server relationships:
 
 ## Version Planning
 
-### v1.1 (Next Release)
-- [ ] Server Search/Filter
-- [ ] Bulk Actions
-- [ ] Keyboard Shortcuts
-- [ ] Export Server List
+### v1.1 (Completed)
+- [x] Server Search/Filter
+- [x] Bulk Actions
+- [x] Keyboard Shortcuts
+- [x] Export Server List
+- [x] Quick Actions Context Menu
+- [x] Dark/Light Theme Toggle
 
-### v1.2
-- [ ] Historical Charts
-- [ ] Import from File
-- [ ] Server Templates
+### v1.2 (Completed)
+- [x] Historical Charts
+- [x] Import from File
+- [x] Server Templates
+- [x] Maintenance Windows
 
-### v1.3
+### v1.3 (Next Release)
 - [ ] Webhooks & Integrations
-- [ ] Maintenance Windows
+- [ ] Custom Status Pages
 - [ ] Advanced Reporting
 
 ### v2.0

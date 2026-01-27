@@ -11,23 +11,29 @@ Server/
 │   ├── Server.swift                       ✅ Server entity with uptime & SSL
 │   ├── ServerMetric.swift                 ✅ Performance metrics
 │   ├── ServerLog.swift                    ✅ Log entries
-│   ├── ServerGroup.swift                  ✅ NEW - Server groups/tags
-│   ├── AlertThreshold.swift               ✅ NEW - Custom alert thresholds
-│   ├── UptimeRecord.swift                 ✅ NEW - Historical uptime records
+│   ├── ServerGroup.swift                  ✅ Server groups/tags
+│   ├── AlertThreshold.swift               ✅ Custom alert thresholds
+│   ├── UptimeRecord.swift                 ✅ Historical uptime records
+│   ├── ServerTemplate.swift               ✅ NEW - Server templates
+│   ├── MaintenanceWindow.swift            ✅ NEW - Maintenance windows
 │   ├── AppModel.swift                     📦 App state model
 │   └── Item.swift                         📦 Legacy - Template model
 │
 ├── Views
-│   ├── DashboardView.swift                ✅ Main dashboard with group filtering
+│   ├── DashboardView.swift                ✅ Main dashboard with search, bulk actions
 │   ├── ServerListItemView.swift           ✅ Server row component
-│   ├── ServerDetailView.swift             ✅ Detail with 4 tabs (Overview/Metrics/Logs/SSL)
-│   ├── AddServerView.swift                ✅ Add server form with groups/tags
-│   ├── SettingsView.swift                 ✅ Settings (General/Notifications/Alerts/Data)
+│   ├── ServerDetailView.swift             ✅ Detail with 5 tabs (Overview/Metrics/History/SSL/Logs)
+│   ├── AddServerView.swift                ✅ Add server form with templates
+│   ├── SettingsView.swift                 ✅ Settings with theme toggle
 │   ├── WelcomeView.swift                  ✅ First launch screen
-│   ├── GroupManagementView.swift          ✅ NEW - Group/tag management
-│   ├── AlertThresholdsView.swift          ✅ NEW - Threshold configuration
-│   ├── CredentialsView.swift              ✅ NEW - SSH credential management
-│   ├── MenuBarView.swift                  ✅ NEW - Menu bar popover
+│   ├── GroupManagementView.swift          ✅ Group/tag management
+│   ├── AlertThresholdsView.swift          ✅ Threshold configuration
+│   ├── CredentialsView.swift              ✅ SSH credential management
+│   ├── MenuBarView.swift                  ✅ Menu bar popover
+│   ├── HistoricalChartsView.swift         ✅ NEW - Historical metrics charts
+│   ├── ServerTemplatesView.swift          ✅ NEW - Template selection UI
+│   ├── MaintenanceWindowsView.swift       ✅ NEW - Maintenance window management
+│   ├── ImportView.swift                   ✅ NEW - Server import UI
 │   ├── NetworkingView.swift               ✅ Network settings view
 │   ├── RolesAndFeaturesView.swift         ✅ Roles configuration
 │   ├── SecurityView.swift                 ✅ Security settings
@@ -38,10 +44,11 @@ Server/
 │
 ├── Services
 │   ├── ServerMonitoringService.swift      ✅ Core monitoring (heavily enhanced)
-│   ├── NotificationService.swift          ✅ NEW - macOS notifications
-│   ├── SSLCertificateService.swift        ✅ NEW - SSL certificate checking
-│   ├── SSHMetricsService.swift            ✅ NEW - Real metrics via SSH
-│   └── KeychainService.swift              ✅ NEW - Secure credential storage
+│   ├── NotificationService.swift          ✅ macOS notifications
+│   ├── SSLCertificateService.swift        ✅ SSL certificate checking
+│   ├── SSHMetricsService.swift            ✅ Real metrics via SSH
+│   ├── KeychainService.swift              ✅ Secure credential storage
+│   └── ExportService.swift                ✅ NEW - JSON/CSV export & import
 │
 ├── Utilities
 │   └── SampleData.swift                   ✅ Test data generator
@@ -59,7 +66,7 @@ Server/
     ├── LAYOUT_FIX_SUMMARY.md              📄 Layout fixes
     └── SCROLLVIEW_WIDTH_FIX.md            📄 ScrollView fixes
 
-Total: 32+ Swift files in Server module
+Total: 38+ Swift files in Server module
 ```
 
 ## 🆕 New Files (Recent Implementation)
@@ -70,6 +77,8 @@ Total: 32+ Swift files in Server module
 | `ServerGroup.swift` | Server organization with groups and tags |
 | `AlertThreshold.swift` | Custom metric threshold definitions |
 | `UptimeRecord.swift` | Historical status for uptime calculations |
+| `ServerTemplate.swift` | Predefined server configurations |
+| `MaintenanceWindow.swift` | Scheduled maintenance periods |
 
 ### Views
 | File | Purpose |
@@ -78,6 +87,10 @@ Total: 32+ Swift files in Server module
 | `AlertThresholdsView.swift` | Configure alert thresholds per server |
 | `CredentialsView.swift` | Manage SSH credentials (Keychain) |
 | `MenuBarView.swift` | Menu bar quick status popover |
+| `HistoricalChartsView.swift` | Time-based metrics visualization |
+| `ServerTemplatesView.swift` | Template selection grid |
+| `MaintenanceWindowsView.swift` | Maintenance window management |
+| `ImportView.swift` | Server import from JSON/CSV/SSH config |
 
 ### Services
 | File | Purpose |
@@ -86,6 +99,7 @@ Total: 32+ Swift files in Server module
 | `SSLCertificateService.swift` | SSL certificate validation & monitoring |
 | `SSHMetricsService.swift` | Real server metrics collection via SSH |
 | `KeychainService.swift` | Secure credential storage in Keychain |
+| `ExportService.swift` | JSON/CSV export and import parsing |
 
 ## 🎯 Primary Files to Know
 
@@ -286,8 +300,10 @@ These files are from templates and not actively used:
 
 ## 🏁 Current Status
 
-- ✅ 32+ Swift files
+- ✅ 38+ Swift files
 - ✅ 9 advanced features implemented
+- ✅ 6 quick win features implemented
+- ✅ 4 medium effort features implemented
 - ✅ Full SwiftData integration
 - ✅ Monitoring service with real ping
 - ✅ macOS notifications
@@ -298,6 +314,14 @@ These files are from templates and not actively used:
 - ✅ Menu bar quick access
 - ✅ Secure credential management
 - ✅ Real metrics via SSH
+- ✅ Historical charts with trends
+- ✅ Server templates (20 built-in)
+- ✅ Maintenance windows
+- ✅ Import from JSON/CSV/SSH config
+- ✅ Search/filter, bulk actions
+- ✅ Export to JSON/CSV
+- ✅ Keyboard shortcuts
+- ✅ Dark/Light theme toggle
 - ✅ Documentation updated
 
 **Ready for production use!** 🎉
