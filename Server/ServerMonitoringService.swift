@@ -80,12 +80,16 @@ class ServerMonitoringService: ObservableObject {
 
     func checkServer(_ server: Server) async {
         let previousStatus = server.status
+        let now = Date()
 
         // Perform the check with retry logic
         let result = await performCheckWithRetry(server: server)
 
+        // Update uptime tracking before changing status
+        updateUptimeTracking(server: server, previousStatus: previousStatus, newStatus: result.status, now: now)
+
         server.status = result.status
-        server.lastChecked = Date()
+        server.lastChecked = now
         server.responseTime = result.responseTime
 
         // Log the check with appropriate detail
@@ -156,6 +160,62 @@ class ServerMonitoringService: ObservableObject {
         modelContext.insert(metric)
 
         try? modelContext.save()
+    }
+
+    // MARK: - Uptime Tracking
+
+    private func updateUptimeTracking(server: Server, previousStatus: ServerStatus, newStatus: ServerStatus, now: Date) {
+        // Initialize monitoring start date if not set
+        if server.monitoringStartDate == nil {
+            server.monitoringStartDate = now
+            server.lastStatusChangeDate = now
+        }
+
+        // Calculate duration of previous status
+        if let lastChange = server.lastStatusChangeDate {
+            let duration = now.timeIntervalSince(lastChange)
+
+            // Update cumulative counters
+            switch previousStatus {
+            case .online:
+                server.totalOnlineSeconds += duration
+            case .offline:
+                server.totalOfflineSeconds += duration
+            case .warning:
+                server.totalWarningSeconds += duration
+            case .unknown:
+                break // Don't count unknown time
+            }
+
+            // If status changed, create an uptime record and update last change date
+            if previousStatus != newStatus && previousStatus != .unknown {
+                // Create record for the previous status period
+                let record = UptimeRecord(
+                    timestamp: lastChange,
+                    status: previousStatus,
+                    durationSeconds: duration
+                )
+                record.server = server
+                modelContext.insert(record)
+
+                // Update the last status change date
+                server.lastStatusChangeDate = now
+            }
+        } else {
+            // First check ever
+            server.lastStatusChangeDate = now
+        }
+
+        // Update legacy uptime field for backwards compatibility (current online streak)
+        if newStatus == .online {
+            if let lastChange = server.lastStatusChangeDate, previousStatus == .online {
+                server.uptime = now.timeIntervalSince(lastChange)
+            } else {
+                server.uptime = 0
+            }
+        } else {
+            server.uptime = nil
+        }
     }
 
     // MARK: - Check with Retry Logic

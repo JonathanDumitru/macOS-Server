@@ -110,7 +110,7 @@ struct ServerDetailHeaderView: View {
             Spacer()
             
             // Quick stats
-            HStack(spacing: 16) {
+            HStack(spacing: 20) {
                 if let responseTime = server.responseTime {
                     VStack(alignment: .trailing, spacing: 2) {
                         Text("\(Int(responseTime))ms")
@@ -120,12 +120,26 @@ struct ServerDetailHeaderView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                
-                if let uptime = server.uptime {
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(formatUptime(uptime))
-                            .font(.system(size: 20, weight: .bold, design: .rounded))
-                        Text("Uptime")
+
+                // Uptime percentage
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(server.formattedUptimePercentage)
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .foregroundStyle(uptimeColor(for: server.uptimePercentage))
+                    Text("Uptime")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+
+                // Current streak
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(server.formattedCurrentStreak)
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(Color(server.status.color))
+                            .frame(width: 6, height: 6)
+                        Text("Streak")
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
                     }
@@ -153,11 +167,22 @@ struct ServerDetailHeaderView: View {
             return "\(hours)h"
         }
     }
+
+    private func uptimeColor(for percentage: Double) -> Color {
+        switch percentage {
+        case 99.9...: return .green
+        case 99.0..<99.9: return .mint
+        case 95.0..<99.0: return .yellow
+        case 90.0..<95.0: return .orange
+        default: return .red
+        }
+    }
 }
 
 struct ServerOverviewView: View {
     let server: Server
-    
+    @State private var selectedUptimePeriod: UptimePeriod = .day
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -171,7 +196,97 @@ struct ServerOverviewView: View {
                     }
                     .padding(8)
                 }
-                
+
+                // Uptime Statistics
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 16) {
+                        // Period selector
+                        HStack {
+                            Text("Time Period:")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                            Picker("Period", selection: $selectedUptimePeriod) {
+                                ForEach(UptimePeriod.allCases, id: \.self) { period in
+                                    Text(period.rawValue).tag(period)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(maxWidth: 400)
+                        }
+
+                        let stats = server.uptimeStats(for: selectedUptimePeriod)
+
+                        // Uptime gauge and stats
+                        HStack(spacing: 30) {
+                            // Large uptime gauge
+                            VStack(spacing: 8) {
+                                ZStack {
+                                    Circle()
+                                        .stroke(Color.gray.opacity(0.2), lineWidth: 10)
+
+                                    Circle()
+                                        .trim(from: 0, to: stats.uptimePercentage / 100)
+                                        .stroke(
+                                            uptimeGradient(for: stats.uptimePercentage),
+                                            style: StrokeStyle(lineWidth: 10, lineCap: .round)
+                                        )
+                                        .rotationEffect(.degrees(-90))
+
+                                    VStack(spacing: 2) {
+                                        Text(String(format: "%.2f", stats.uptimePercentage))
+                                            .font(.system(size: 28, weight: .bold, design: .rounded))
+                                        Text("%")
+                                            .font(.system(size: 14, weight: .medium))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                .frame(width: 100, height: 100)
+
+                                Text("Uptime")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            // Stats breakdown
+                            VStack(alignment: .leading, spacing: 12) {
+                                UptimeStatRow(
+                                    icon: "checkmark.circle.fill",
+                                    color: .green,
+                                    label: "Online",
+                                    value: formatDuration(stats.totalOnlineSeconds)
+                                )
+
+                                UptimeStatRow(
+                                    icon: "xmark.circle.fill",
+                                    color: .red,
+                                    label: "Offline",
+                                    value: formatDuration(stats.totalOfflineSeconds)
+                                )
+
+                                UptimeStatRow(
+                                    icon: "clock.fill",
+                                    color: .blue,
+                                    label: "Current Streak",
+                                    value: "\(stats.formattedStreak) (\(stats.currentStreakStatus.rawValue))"
+                                )
+
+                                if let lastChange = stats.lastStatusChange {
+                                    UptimeStatRow(
+                                        icon: "arrow.triangle.2.circlepath",
+                                        color: .purple,
+                                        label: "Last Change",
+                                        value: lastChange.formatted(date: .abbreviated, time: .shortened)
+                                    )
+                                }
+                            }
+                        }
+                        .padding(.top, 8)
+                    }
+                    .padding(8)
+                } label: {
+                    Label("Uptime Statistics", systemImage: "chart.bar.fill")
+                }
+
                 // Notes
                 GroupBox("Notes") {
                     if server.notes.isEmpty {
@@ -186,7 +301,7 @@ struct ServerOverviewView: View {
                             .padding(8)
                     }
                 }
-                
+
                 // Recent Metrics Summary
                 if let latestMetric = server.metrics.sorted(by: { $0.timestamp > $1.timestamp }).first {
                     GroupBox("Latest Metrics") {
@@ -206,6 +321,60 @@ struct ServerOverviewView: View {
                 }
             }
             .padding()
+        }
+    }
+
+    private func uptimeGradient(for percentage: Double) -> LinearGradient {
+        let color: Color
+        switch percentage {
+        case 99.9...: color = .green
+        case 99.0..<99.9: color = .mint
+        case 95.0..<99.0: color = .yellow
+        case 90.0..<95.0: color = .orange
+        default: color = .red
+        }
+        return LinearGradient(
+            colors: [color, color.opacity(0.7)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private func formatDuration(_ seconds: Double) -> String {
+        guard seconds > 0 else { return "0m" }
+        let days = Int(seconds) / 86400
+        let hours = (Int(seconds) % 86400) / 3600
+        let minutes = (Int(seconds) % 3600) / 60
+
+        if days > 0 {
+            return "\(days)d \(hours)h \(minutes)m"
+        } else if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        } else {
+            return "\(minutes)m"
+        }
+    }
+}
+
+struct UptimeStatRow: View {
+    let icon: String
+    let color: Color
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .foregroundStyle(color)
+                .frame(width: 16)
+
+            Text(label)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .frame(width: 100, alignment: .leading)
+
+            Text(value)
+                .font(.system(size: 12, weight: .medium))
         }
     }
 }
