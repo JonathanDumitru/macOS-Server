@@ -6,10 +6,13 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct ServerListItemView: View {
     let server: Server
-    
+    @Environment(\.modelContext) private var modelContext
+    @State private var uptimePercentage: Double?
+
     var body: some View {
         HStack(spacing: 10) {
             // Server icon with status overlay
@@ -58,7 +61,12 @@ struct ServerListItemView: View {
             }
             
             Spacer(minLength: 0)
-            
+
+            // Uptime badge
+            if let uptime = uptimePercentage, uptime > 0 {
+                UptimeBadge(percentage: uptime, showIcon: false)
+            }
+
             // Last checked
             if let lastChecked = server.lastChecked {
                 Text(lastChecked, style: .relative)
@@ -67,5 +75,16 @@ struct ServerListItemView: View {
             }
         }
         .padding(.vertical, 6)
+        .onAppear {
+            loadUptime()
+        }
+    }
+
+    private func loadUptime() {
+        let service = UptimeTrackingService(modelContext: modelContext)
+        let percentage = service.calculateUptime(for: server, period: .week7d)
+        if percentage > 0 {
+            uptimePercentage = percentage
+        }
     }
 }

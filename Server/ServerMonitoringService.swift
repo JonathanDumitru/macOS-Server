@@ -13,11 +13,13 @@ internal import Combine
 class ServerMonitoringService: ObservableObject {
     @Published var isMonitoring = false
     private var monitoringTask: Task<Void, Never>?
-    
+
     private let modelContext: ModelContext
-    
+    private let uptimeTrackingService: UptimeTrackingService
+
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
+        self.uptimeTrackingService = UptimeTrackingService(modelContext: modelContext)
     }
     
     func startMonitoring() {
@@ -49,15 +51,24 @@ class ServerMonitoringService: ObservableObject {
     
     func checkServer(_ server: Server) async {
         let startTime = Date()
-        
+
         do {
             let status = try await pingServer(host: server.host, port: server.port, type: server.serverType)
             let responseTime = Date().timeIntervalSince(startTime) * 1000 // Convert to ms
-            
+
             server.status = status
             server.lastChecked = Date()
             server.responseTime = responseTime
-            
+
+            // Record uptime check
+            uptimeTrackingService.recordCheck(
+                server: server,
+                isOnline: status == .online,
+                responseTime: responseTime,
+                statusCode: nil,
+                errorMessage: status == .online ? nil : "Status: \(status.rawValue)"
+            )
+
             // Log the check
             let log = ServerLog(
                 timestamp: Date(),
@@ -66,7 +77,7 @@ class ServerMonitoringService: ObservableObject {
             )
             log.server = server
             modelContext.insert(log)
-            
+
             // Create metric snapshot
             let metric = ServerMetric(
                 timestamp: Date(),
@@ -79,12 +90,21 @@ class ServerMonitoringService: ObservableObject {
             )
             metric.server = server
             modelContext.insert(metric)
-            
+
             try? modelContext.save()
         } catch {
             server.status = .offline
             server.lastChecked = Date()
-            
+
+            // Record uptime check (failed)
+            uptimeTrackingService.recordCheck(
+                server: server,
+                isOnline: false,
+                responseTime: nil,
+                statusCode: nil,
+                errorMessage: error.localizedDescription
+            )
+
             let log = ServerLog(
                 timestamp: Date(),
                 message: "Server check failed: \(error.localizedDescription)",
@@ -92,7 +112,7 @@ class ServerMonitoringService: ObservableObject {
             )
             log.server = server
             modelContext.insert(log)
-            
+
             try? modelContext.save()
         }
     }
