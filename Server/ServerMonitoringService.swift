@@ -77,8 +77,8 @@ class ServerMonitoringService: ObservableObject {
                 errorMessage: status == .online ? nil : "Status: \(status.rawValue)"
             )
 
-            // Check response time threshold for notifications (default 1000ms)
-            NotificationService.shared.checkResponseThreshold(server: server, threshold: 1000)
+            // Check response time threshold for notifications (uses preference setting)
+            NotificationService.shared.checkResponseThreshold(server: server)
 
             // Log the check
             let log = ServerLog(

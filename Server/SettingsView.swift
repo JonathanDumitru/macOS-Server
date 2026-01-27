@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 import UserNotifications
 
 struct SettingsView: View {
@@ -286,43 +287,142 @@ struct DataSettingsView: View {
     @Binding var maxLogEntries: Int
     @Binding var maxMetricEntries: Int
     @Environment(\.modelContext) private var modelContext
-    
+
+    @State private var showClearLogsAlert = false
+    @State private var showClearMetricsAlert = false
+    @State private var showClearUptimeAlert = false
+    @State private var logCount = 0
+    @State private var metricCount = 0
+    @State private var uptimeCount = 0
+
     var body: some View {
         Form {
             Section {
                 Stepper("Max Log Entries: \(maxLogEntries)", value: $maxLogEntries, in: 100...10000, step: 100)
-                
+
                 Stepper("Max Metric Entries: \(maxMetricEntries)", value: $maxMetricEntries, in: 100...5000, step: 100)
-                
+
                 Text("Older entries will be automatically deleted")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {
                 Text("Data Retention")
             }
-            
+
             Section {
-                Button("Clear All Logs", role: .destructive) {
-                    clearLogs()
+                Button("Clear All Logs (\(logCount))", role: .destructive) {
+                    showClearLogsAlert = true
                 }
-                
-                Button("Clear All Metrics", role: .destructive) {
-                    clearMetrics()
+
+                Button("Clear All Metrics (\(metricCount))", role: .destructive) {
+                    showClearMetricsAlert = true
+                }
+
+                Button("Clear Uptime History (\(uptimeCount))", role: .destructive) {
+                    showClearUptimeAlert = true
                 }
             } header: {
                 Text("Data Management")
+            } footer: {
+                Text("This action cannot be undone")
+                    .font(.caption)
             }
         }
         .formStyle(.grouped)
         .padding()
+        .onAppear {
+            refreshCounts()
+        }
+        .alert("Clear All Logs?", isPresented: $showClearLogsAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Clear", role: .destructive) {
+                clearLogs()
+            }
+        } message: {
+            Text("This will permanently delete \(logCount) log entries.")
+        }
+        .alert("Clear All Metrics?", isPresented: $showClearMetricsAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Clear", role: .destructive) {
+                clearMetrics()
+            }
+        } message: {
+            Text("This will permanently delete \(metricCount) metric entries.")
+        }
+        .alert("Clear Uptime History?", isPresented: $showClearUptimeAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Clear", role: .destructive) {
+                clearUptimeHistory()
+            }
+        } message: {
+            Text("This will permanently delete \(uptimeCount) uptime records.")
+        }
     }
-    
+
+    private func refreshCounts() {
+        do {
+            let logDescriptor = FetchDescriptor<ServerLog>()
+            logCount = try modelContext.fetchCount(logDescriptor)
+
+            let metricDescriptor = FetchDescriptor<ServerMetric>()
+            metricCount = try modelContext.fetchCount(metricDescriptor)
+
+            let uptimeDescriptor = FetchDescriptor<UptimeRecord>()
+            uptimeCount = try modelContext.fetchCount(uptimeDescriptor)
+        } catch {
+            logCount = 0
+            metricCount = 0
+            uptimeCount = 0
+        }
+    }
+
     private func clearLogs() {
-        // Implementation for clearing logs
+        do {
+            let descriptor = FetchDescriptor<ServerLog>()
+            let logs = try modelContext.fetch(descriptor)
+            for log in logs {
+                modelContext.delete(log)
+            }
+            try modelContext.save()
+            refreshCounts()
+        } catch {
+            // Error clearing logs
+        }
     }
-    
+
     private func clearMetrics() {
-        // Implementation for clearing metrics
+        do {
+            let descriptor = FetchDescriptor<ServerMetric>()
+            let metrics = try modelContext.fetch(descriptor)
+            for metric in metrics {
+                modelContext.delete(metric)
+            }
+            try modelContext.save()
+            refreshCounts()
+        } catch {
+            // Error clearing metrics
+        }
+    }
+
+    private func clearUptimeHistory() {
+        do {
+            let recordDescriptor = FetchDescriptor<UptimeRecord>()
+            let records = try modelContext.fetch(recordDescriptor)
+            for record in records {
+                modelContext.delete(record)
+            }
+
+            let dailyDescriptor = FetchDescriptor<UptimeDaily>()
+            let dailies = try modelContext.fetch(dailyDescriptor)
+            for daily in dailies {
+                modelContext.delete(daily)
+            }
+
+            try modelContext.save()
+            refreshCounts()
+        } catch {
+            // Error clearing uptime history
+        }
     }
 }
 

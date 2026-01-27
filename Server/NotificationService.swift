@@ -8,6 +8,9 @@
 import Foundation
 import UserNotifications
 import AppKit
+import os.log
+
+private let logger = Logger(subsystem: "com.server.app", category: "Notifications")
 
 @MainActor
 class NotificationService: ObservableObject {
@@ -19,6 +22,48 @@ class NotificationService: ObservableObject {
     private var previousServerStates: [UUID: ServerStatus] = [:]
     private var notificationCooldowns: [String: Date] = [:]
     private let cooldownInterval: TimeInterval = 300 // 5 minutes between same notifications
+
+    // MARK: - Preference Accessors (read from AppStorage defaults)
+
+    private var notifyOnOffline: Bool {
+        UserDefaults.standard.object(forKey: "notifyOnOffline") as? Bool ?? true
+    }
+
+    private var notifyOnOnline: Bool {
+        UserDefaults.standard.object(forKey: "notifyOnOnline") as? Bool ?? true
+    }
+
+    private var notifyOnWarning: Bool {
+        UserDefaults.standard.object(forKey: "notifyOnWarning") as? Bool ?? true
+    }
+
+    private var notifyOnSSLExpiry: Bool {
+        UserDefaults.standard.object(forKey: "notifyOnSSLExpiry") as? Bool ?? true
+    }
+
+    private var sslExpiryDaysThreshold: Int {
+        UserDefaults.standard.object(forKey: "sslExpiryDaysThreshold") as? Int ?? 30
+    }
+
+    private var notifyOnResponseThreshold: Bool {
+        UserDefaults.standard.object(forKey: "notifyOnResponseThreshold") as? Bool ?? false
+    }
+
+    private var responseThresholdMs: Int {
+        UserDefaults.standard.object(forKey: "responseThresholdMs") as? Int ?? 1000
+    }
+
+    private var playNotificationSound: Bool {
+        UserDefaults.standard.object(forKey: "playNotificationSound") as? Bool ?? true
+    }
+
+    private var quietHours: QuietHours {
+        QuietHours(
+            isEnabled: UserDefaults.standard.object(forKey: "quietHoursEnabled") as? Bool ?? false,
+            startHour: UserDefaults.standard.object(forKey: "quietHoursStart") as? Int ?? 22,
+            endHour: UserDefaults.standard.object(forKey: "quietHoursEnd") as? Int ?? 7
+        )
+    }
 
     private init() {
         Task {
@@ -34,8 +79,9 @@ class NotificationService: ObservableObject {
             let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
             isAuthorized = granted
             await checkAuthorizationStatus()
+            logger.info("Notification authorization granted: \(granted)")
         } catch {
-            print("Notification authorization failed: \(error)")
+            logger.error("Notification authorization failed: \(error.localizedDescription)")
         }
     }
 
@@ -89,6 +135,10 @@ class NotificationService: ObservableObject {
 
     func checkServerStatusChange(server: Server, previousStatus: ServerStatus?) {
         guard isAuthorized else { return }
+        guard !quietHours.isCurrentlyQuiet else {
+            logger.debug("Suppressing notification during quiet hours")
+            return
+        }
 
         let newStatus = server.status
         guard let previous = previousStatus, previous != newStatus else {
@@ -97,12 +147,12 @@ class NotificationService: ObservableObject {
             return
         }
 
-        // Status changed
-        if newStatus == .offline && previous != .offline {
+        // Status changed - check preferences
+        if newStatus == .offline && previous != .offline && notifyOnOffline {
             sendServerOfflineNotification(server: server)
-        } else if newStatus == .online && previous == .offline {
+        } else if newStatus == .online && previous == .offline && notifyOnOnline {
             sendServerOnlineNotification(server: server)
-        } else if newStatus == .warning && previous == .online {
+        } else if newStatus == .warning && previous == .online && notifyOnWarning {
             sendServerWarningNotification(server: server)
         }
 
@@ -121,13 +171,15 @@ class NotificationService: ObservableObject {
         let identifier = "offline-\(server.id.uuidString)"
         guard !isInCooldown(identifier: identifier) else { return }
 
+        let sound: UNNotificationSound? = playNotificationSound ? .defaultCritical : nil
+
         sendNotification(
             title: "Server Offline",
             body: "\(server.name) is now offline",
             subtitle: server.host,
             identifier: identifier,
             categoryIdentifier: "SERVER_STATUS",
-            sound: .default
+            sound: sound
         )
     }
 
@@ -135,13 +187,15 @@ class NotificationService: ObservableObject {
         let identifier = "online-\(server.id.uuidString)"
         guard !isInCooldown(identifier: identifier) else { return }
 
+        let sound: UNNotificationSound? = playNotificationSound ? .default : nil
+
         sendNotification(
             title: "Server Back Online",
             body: "\(server.name) is now online",
             subtitle: server.host,
             identifier: identifier,
             categoryIdentifier: "SERVER_STATUS",
-            sound: .default
+            sound: sound
         )
     }
 
@@ -149,32 +203,40 @@ class NotificationService: ObservableObject {
         let identifier = "warning-\(server.id.uuidString)"
         guard !isInCooldown(identifier: identifier) else { return }
 
+        let sound: UNNotificationSound? = playNotificationSound ? .default : nil
+
         sendNotification(
             title: "Server Warning",
             body: "\(server.name) has a warning status",
             subtitle: server.host,
             identifier: identifier,
             categoryIdentifier: "SERVER_STATUS",
-            sound: .default
+            sound: sound
         )
     }
 
     // MARK: - Response Time Notifications
 
-    func checkResponseThreshold(server: Server, threshold: Double) {
+    func checkResponseThreshold(server: Server, threshold: Double? = nil) {
         guard isAuthorized else { return }
-        guard let responseTime = server.responseTime, responseTime > threshold else { return }
+        guard notifyOnResponseThreshold else { return }
+        guard !quietHours.isCurrentlyQuiet else { return }
+
+        let effectiveThreshold = threshold ?? Double(responseThresholdMs)
+        guard let responseTime = server.responseTime, responseTime > effectiveThreshold else { return }
 
         let identifier = "threshold-\(server.id.uuidString)"
         guard !isInCooldown(identifier: identifier) else { return }
 
+        let sound: UNNotificationSound? = playNotificationSound ? .default : nil
+
         sendNotification(
             title: "High Response Time",
-            body: "\(server.name): \(Int(responseTime))ms (threshold: \(Int(threshold))ms)",
+            body: "\(server.name): \(Int(responseTime))ms (threshold: \(Int(effectiveThreshold))ms)",
             subtitle: server.host,
             identifier: identifier,
             categoryIdentifier: "SERVER_STATUS",
-            sound: .default
+            sound: sound
         )
     }
 
@@ -182,6 +244,9 @@ class NotificationService: ObservableObject {
 
     func sendSSLExpiryNotification(server: Server, daysRemaining: Int) {
         guard isAuthorized else { return }
+        guard notifyOnSSLExpiry else { return }
+        guard daysRemaining <= sslExpiryDaysThreshold else { return }
+        guard !quietHours.isCurrentlyQuiet else { return }
 
         let identifier = "ssl-expiry-\(server.id.uuidString)-\(daysRemaining)"
         guard !isInCooldown(identifier: identifier) else { return }
@@ -195,13 +260,22 @@ class NotificationService: ObservableObject {
             urgency = "expires in \(daysRemaining) days"
         }
 
+        let sound: UNNotificationSound?
+        if !playNotificationSound {
+            sound = nil
+        } else if daysRemaining <= 7 {
+            sound = .defaultCritical
+        } else {
+            sound = .default
+        }
+
         sendNotification(
             title: "SSL Certificate Warning",
             body: "\(server.name) certificate \(urgency)",
             subtitle: server.host,
             identifier: identifier,
             categoryIdentifier: "SSL_EXPIRY",
-            sound: daysRemaining <= 7 ? .defaultCritical : .default
+            sound: sound
         )
     }
 
@@ -236,7 +310,9 @@ class NotificationService: ObservableObject {
 
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
-                print("Failed to send notification: \(error)")
+                logger.error("Failed to send notification: \(error.localizedDescription)")
+            } else {
+                logger.debug("Notification sent: \(identifier)")
             }
         }
 
