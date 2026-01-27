@@ -59,6 +59,7 @@ struct GeneralSettingsView: View {
     @Binding var monitoringInterval: Int
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra = true
     @AppStorage("launchAtLogin") private var launchAtLogin = false
+    @AppStorage("enableRealMetrics") private var enableRealMetrics = true
 
     var body: some View {
         Form {
@@ -76,6 +77,26 @@ struct GeneralSettingsView: View {
                     .foregroundStyle(.secondary)
             } header: {
                 Text("Monitoring")
+            }
+
+            Section {
+                Toggle("Collect Real Metrics via SSH", isOn: $enableRealMetrics)
+
+                Text("When enabled, collect actual CPU, memory, and disk metrics from servers with stored credentials. Requires SSH access.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if enableRealMetrics {
+                    HStack {
+                        Image(systemName: "info.circle")
+                            .foregroundStyle(.blue)
+                        Text("SSH key authentication recommended for best results")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                Text("Real Metrics")
             }
 
             Section {

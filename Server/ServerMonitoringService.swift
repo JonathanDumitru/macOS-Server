@@ -38,9 +38,11 @@ class ServerMonitoringService: ObservableObject {
     private let modelContext: ModelContext
     private let notificationService = NotificationService.shared
     private let sslCertificateService = SSLCertificateService.shared
+    private let sshMetricsService = SSHMetricsService.shared
     private let connectionTimeout: TimeInterval = 10.0
     private let maxRetries = 2
     private let sslCheckInterval: TimeInterval = 3600 // Check SSL every hour
+    @AppStorage("enableRealMetrics") private var enableRealMetrics = true
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
@@ -148,16 +150,8 @@ class ServerMonitoringService: ObservableObject {
         log.server = server
         modelContext.insert(log)
 
-        // Create metric snapshot (still mock for now - will be replaced in feature #9)
-        let metric = ServerMetric(
-            timestamp: Date(),
-            cpuUsage: Double.random(in: 10...80),
-            memoryUsage: Double.random(in: 30...90),
-            diskUsage: Double.random(in: 40...85),
-            networkIn: Double.random(in: 0...100),
-            networkOut: Double.random(in: 0...100),
-            activeConnections: Int.random(in: 0...50)
-        )
+        // Create metric snapshot - use real metrics if credentials available
+        let metric = await collectServerMetrics(server: server)
         metric.server = server
         modelContext.insert(metric)
 
@@ -173,6 +167,64 @@ class ServerMonitoringService: ObservableObject {
     }
 
     // MARK: - SSL Certificate Checking
+
+    // MARK: - Metrics Collection
+
+    private func collectServerMetrics(server: Server) async -> ServerMetric {
+        // Try to collect real metrics if credentials are available
+        if enableRealMetrics && server.hasStoredCredentials && server.supportsCredentials {
+            if let credentials = server.loadCredentials() {
+                let result = await sshMetricsService.collectMetrics(
+                    host: server.host,
+                    port: server.port,
+                    credentials: credentials
+                )
+
+                switch result {
+                case .success(let realMetrics):
+                    // Log successful metrics collection
+                    let log = ServerLog(
+                        timestamp: Date(),
+                        message: "Real metrics collected via SSH",
+                        level: .info
+                    )
+                    log.server = server
+                    modelContext.insert(log)
+
+                    return ServerMetric(
+                        timestamp: Date(),
+                        cpuUsage: realMetrics.cpuUsage,
+                        memoryUsage: realMetrics.memoryUsage,
+                        diskUsage: realMetrics.diskUsage,
+                        networkIn: realMetrics.networkIn,
+                        networkOut: realMetrics.networkOut,
+                        activeConnections: realMetrics.processCount
+                    )
+
+                case .failure(let error):
+                    // Log the failure and fall back to mock data
+                    let log = ServerLog(
+                        timestamp: Date(),
+                        message: "SSH metrics collection failed: \(error.localizedDescription). Using simulated data.",
+                        level: .warning
+                    )
+                    log.server = server
+                    modelContext.insert(log)
+                }
+            }
+        }
+
+        // Fall back to mock/simulated data
+        return ServerMetric(
+            timestamp: Date(),
+            cpuUsage: Double.random(in: 10...80),
+            memoryUsage: Double.random(in: 30...90),
+            diskUsage: Double.random(in: 40...85),
+            networkIn: Double.random(in: 0...100),
+            networkOut: Double.random(in: 0...100),
+            activeConnections: Int.random(in: 0...50)
+        )
+    }
 
     private func checkSSLCertificate(server: Server) async {
         // Only check SSL periodically (not every monitoring cycle)
