@@ -16,6 +16,8 @@ class ServerMonitoringService: ObservableObject {
 
     private let modelContext: ModelContext
     private let uptimeTrackingService: UptimeTrackingService
+    private var sslCheckCounter: [UUID: Int] = [:]
+    private let sslCheckInterval = 10 // Check SSL every 10 regular checks
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
@@ -91,6 +93,11 @@ class ServerMonitoringService: ObservableObject {
             metric.server = server
             modelContext.insert(metric)
 
+            // Check SSL certificate for HTTPS servers (less frequently)
+            if server.serverType == .https {
+                await checkSSLCertificateIfNeeded(server)
+            }
+
             try? modelContext.save()
         } catch {
             server.status = .offline
@@ -160,7 +167,7 @@ class ServerMonitoringService: ObservableObject {
         return try await withCheckedThrowingContinuation { continuation in
             var readStream: Unmanaged<CFReadStream>?
             var writeStream: Unmanaged<CFWriteStream>?
-            
+
             CFStreamCreatePairWithSocketToHost(
                 nil,
                 host as CFString,
@@ -168,16 +175,16 @@ class ServerMonitoringService: ObservableObject {
                 &readStream,
                 &writeStream
             )
-            
+
             guard let inputStream = readStream?.takeRetainedValue(),
                   let outputStream = writeStream?.takeRetainedValue() else {
                 continuation.resume(throwing: ServerError.connectionFailed)
                 return
             }
-            
+
             CFReadStreamOpen(inputStream)
             CFWriteStreamOpen(outputStream)
-            
+
             // Simple check - if we can open the streams, consider it online
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                 CFReadStreamClose(inputStream)
@@ -185,6 +192,73 @@ class ServerMonitoringService: ObservableObject {
                 continuation.resume(returning: .online)
             }
         }
+    }
+
+    // MARK: - SSL Certificate Checking
+
+    private func checkSSLCertificateIfNeeded(_ server: Server) async {
+        let counter = sslCheckCounter[server.id] ?? 0
+        sslCheckCounter[server.id] = counter + 1
+
+        // Check SSL every N regular checks, or if no certificate exists
+        let shouldCheck = server.sslCertificate == nil || counter % sslCheckInterval == 0
+
+        guard shouldCheck else { return }
+
+        do {
+            let certInfo = try await SSLCertificateService.shared.checkCertificate(
+                host: server.host,
+                port: server.port
+            )
+            certInfo.serverId = server.id
+
+            // Update or create certificate
+            if let existing = server.sslCertificate {
+                existing.commonName = certInfo.commonName
+                existing.issuer = certInfo.issuer
+                existing.organization = certInfo.organization
+                existing.serialNumber = certInfo.serialNumber
+                existing.signatureAlgorithm = certInfo.signatureAlgorithm
+                existing.validFrom = certInfo.validFrom
+                existing.validUntil = certInfo.validUntil
+                existing.isValid = certInfo.isValid
+                existing.chainLength = certInfo.chainLength
+                existing.isChainComplete = certInfo.isChainComplete
+                existing.subjectAltNames = certInfo.subjectAltNames
+                existing.lastChecked = Date()
+                existing.checkError = certInfo.checkError
+            } else {
+                modelContext.insert(certInfo)
+                server.sslCertificate = certInfo
+            }
+
+            // Log SSL check
+            if let days = certInfo.daysUntilExpiry, days <= 30 {
+                let log = ServerLog(
+                    timestamp: Date(),
+                    message: "SSL certificate expires in \(days) days",
+                    level: days <= 7 ? .error : .warning
+                )
+                log.server = server
+                modelContext.insert(log)
+            }
+        } catch {
+            // Log SSL check error
+            let log = ServerLog(
+                timestamp: Date(),
+                message: "SSL certificate check failed: \(error.localizedDescription)",
+                level: .warning
+            )
+            log.server = server
+            modelContext.insert(log)
+        }
+    }
+
+    func forceSSLCheck(_ server: Server) async {
+        guard server.serverType == .https else { return }
+        sslCheckCounter[server.id] = 0
+        await checkSSLCertificateIfNeeded(server)
+        try? modelContext.save()
     }
 }
 

@@ -16,6 +16,7 @@ struct ServerDetailView: View {
     enum DetailTab: String, CaseIterable {
         case overview = "Overview"
         case uptime = "Uptime"
+        case ssl = "SSL"
         case metrics = "Metrics"
         case logs = "Logs"
 
@@ -23,9 +24,18 @@ struct ServerDetailView: View {
             switch self {
             case .overview: return "info.circle"
             case .uptime: return "arrow.up.circle"
+            case .ssl: return "lock.fill"
             case .metrics: return "chart.xyaxis.line"
             case .logs: return "list.bullet.rectangle"
             }
+        }
+    }
+
+    var availableTabs: [DetailTab] {
+        if server.serverType == .https {
+            return DetailTab.allCases
+        } else {
+            return DetailTab.allCases.filter { $0 != .ssl }
         }
     }
     
@@ -39,14 +49,14 @@ struct ServerDetailView: View {
             
             // Tab Picker
             Picker("View", selection: $selectedTab) {
-                ForEach(DetailTab.allCases, id: \.self) { tab in
+                ForEach(availableTabs, id: \.self) { tab in
                     Label(tab.rawValue, systemImage: tab.icon)
                         .tag(tab)
                 }
             }
             .pickerStyle(.segmented)
             .padding()
-            
+
             // Content
             TabView(selection: $selectedTab) {
                 ServerOverviewView(server: server)
@@ -54,6 +64,11 @@ struct ServerDetailView: View {
 
                 ServerUptimeView(server: server)
                     .tag(DetailTab.uptime)
+
+                if server.serverType == .https {
+                    SSLCertificateView(server: server)
+                        .tag(DetailTab.ssl)
+                }
 
                 ServerMetricsView(server: server)
                     .tag(DetailTab.metrics)

@@ -62,6 +62,11 @@ struct ServerListItemView: View {
             
             Spacer(minLength: 0)
 
+            // SSL badge for HTTPS servers
+            if server.serverType == .https {
+                SSLStatusBadge(certificate: server.sslCertificate, showLabel: true, size: .small)
+            }
+
             // Uptime badge
             if let uptime = uptimePercentage, uptime > 0 {
                 UptimeBadge(percentage: uptime, showIcon: false)

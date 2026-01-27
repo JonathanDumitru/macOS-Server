@@ -30,6 +30,10 @@ final class Server {
 
     // Group relationship (optional - server may not belong to a group)
     var group: ServerGroup?
+
+    // SSL Certificate (for HTTPS servers)
+    @Relationship(deleteRule: .cascade)
+    var sslCertificate: SSLCertificateInfo?
     
     init(
         id: UUID = UUID(),

@@ -18,6 +18,7 @@ struct ServerApp: App {
             ServerGroup.self,
             UptimeRecord.self,
             UptimeDaily.self,
+            SSLCertificateInfo.self,
             Item.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
