@@ -32,6 +32,11 @@ final class Server {
     var group: ServerGroup? // Optional group assignment
     var tagNames: [String] = [] // Tag names stored as strings for simplicity
 
+    // SSL Certificate Info (stored as JSON string for SwiftData compatibility)
+    var sslCertificateJSON: String?
+    var sslLastChecked: Date?
+    var sslExpiryDays: Int? // Cached for quick access
+
     // Relationships
     @Relationship(deleteRule: .cascade, inverse: \ServerMetric.server)
     var metrics: [ServerMetric] = []
@@ -184,6 +189,39 @@ final class Server {
         } else {
             return "\(minutes)m"
         }
+    }
+
+    // MARK: - SSL Certificate Properties
+
+    /// Whether this server type supports SSL certificates
+    var supportsSSL: Bool {
+        serverType == .https
+    }
+
+    /// Decoded SSL certificate info
+    var sslCertificate: SSLCertificateInfo? {
+        guard let json = sslCertificateJSON,
+              let data = json.data(using: .utf8) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(SSLCertificateInfo.self, from: data)
+    }
+
+    /// Update SSL certificate info
+    func updateSSLCertificate(_ info: SSLCertificateInfo) {
+        if let data = try? JSONEncoder().encode(info),
+           let json = String(data: data, encoding: .utf8) {
+            sslCertificateJSON = json
+            sslLastChecked = Date()
+            sslExpiryDays = info.daysUntilExpiry
+        }
+    }
+
+    /// Clear SSL certificate info
+    func clearSSLCertificate() {
+        sslCertificateJSON = nil
+        sslLastChecked = nil
+        sslExpiryDays = nil
     }
 }
 

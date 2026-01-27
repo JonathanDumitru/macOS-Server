@@ -37,8 +37,10 @@ class ServerMonitoringService: ObservableObject {
 
     private let modelContext: ModelContext
     private let notificationService = NotificationService.shared
+    private let sslCertificateService = SSLCertificateService.shared
     private let connectionTimeout: TimeInterval = 10.0
     private let maxRetries = 2
+    private let sslCheckInterval: TimeInterval = 3600 // Check SSL every hour
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
@@ -162,7 +164,62 @@ class ServerMonitoringService: ObservableObject {
         // Check alert thresholds
         await checkAlertThresholds(server: server, metric: metric, responseTime: result.responseTime)
 
+        // Check SSL certificate for HTTPS servers
+        if server.supportsSSL {
+            await checkSSLCertificate(server: server)
+        }
+
         try? modelContext.save()
+    }
+
+    // MARK: - SSL Certificate Checking
+
+    private func checkSSLCertificate(server: Server) async {
+        // Only check SSL periodically (not every monitoring cycle)
+        if let lastCheck = server.sslLastChecked,
+           Date().timeIntervalSince(lastCheck) < sslCheckInterval {
+            return
+        }
+
+        let result = await sslCertificateService.checkCertificate(host: server.host, port: server.port)
+
+        switch result {
+        case .success(let certInfo):
+            let previousExpiryDays = server.sslExpiryDays
+            server.updateSSLCertificate(certInfo)
+
+            // Log certificate info
+            let log = ServerLog(
+                timestamp: Date(),
+                message: "SSL certificate checked: \(certInfo.commonName ?? server.host) expires in \(certInfo.daysUntilExpiry) days",
+                level: certInfo.isExpiringSoon ? .warning : .info
+            )
+            log.server = server
+            modelContext.insert(log)
+
+            // Send notification if certificate is expiring and we haven't notified recently
+            if certInfo.isExpiringSoon || certInfo.isExpired {
+                // Only notify if expiry days changed significantly or first check
+                let shouldNotify = previousExpiryDays == nil ||
+                    abs((previousExpiryDays ?? 0) - certInfo.daysUntilExpiry) >= 1
+
+                if shouldNotify {
+                    await notificationService.notifySSLCertificateExpiring(
+                        serverName: server.name,
+                        daysUntilExpiry: certInfo.daysUntilExpiry
+                    )
+                }
+            }
+
+        case .failure(let error):
+            let log = ServerLog(
+                timestamp: Date(),
+                message: "SSL certificate check failed: \(error.localizedDescription)",
+                level: .warning
+            )
+            log.server = server
+            modelContext.insert(log)
+        }
     }
 
     // MARK: - Alert Threshold Checking

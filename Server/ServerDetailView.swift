@@ -16,14 +16,24 @@ struct ServerDetailView: View {
     enum DetailTab: String, CaseIterable {
         case overview = "Overview"
         case metrics = "Metrics"
+        case ssl = "SSL"
         case logs = "Logs"
-        
+
         var icon: String {
             switch self {
             case .overview: return "info.circle"
             case .metrics: return "chart.xyaxis.line"
+            case .ssl: return "lock.fill"
             case .logs: return "list.bullet.rectangle"
             }
+        }
+    }
+
+    var availableTabs: [DetailTab] {
+        if server.supportsSSL {
+            return DetailTab.allCases
+        } else {
+            return DetailTab.allCases.filter { $0 != .ssl }
         }
     }
     
@@ -37,22 +47,27 @@ struct ServerDetailView: View {
             
             // Tab Picker
             Picker("View", selection: $selectedTab) {
-                ForEach(DetailTab.allCases, id: \.self) { tab in
+                ForEach(availableTabs, id: \.self) { tab in
                     Label(tab.rawValue, systemImage: tab.icon)
                         .tag(tab)
                 }
             }
             .pickerStyle(.segmented)
             .padding()
-            
+
             // Content
             TabView(selection: $selectedTab) {
                 ServerOverviewView(server: server)
                     .tag(DetailTab.overview)
-                
+
                 ServerMetricsView(server: server)
                     .tag(DetailTab.metrics)
-                
+
+                if server.supportsSSL {
+                    SSLCertificateView(server: server)
+                        .tag(DetailTab.ssl)
+                }
+
                 ServerLogsView(server: server)
                     .tag(DetailTab.logs)
             }
@@ -571,32 +586,207 @@ struct ServerLogsView: View {
 
 struct LogItemView: View {
     let log: ServerLog
-    
+
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: log.level.iconName)
                 .foregroundStyle(Color(log.level.color))
                 .font(.system(size: 14, weight: .semibold))
                 .frame(width: 20)
-            
+
             VStack(alignment: .leading, spacing: 3) {
                 HStack {
                     Text(log.level.rawValue.uppercased())
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(Color(log.level.color))
-                    
+
                     Spacer()
-                    
+
                     Text(log.timestamp, style: .time)
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                 }
-                
+
                 Text(log.message)
                     .font(.system(size: 12))
                     .foregroundStyle(.primary)
             }
         }
         .padding(.vertical, 6)
+    }
+}
+
+// MARK: - SSL Certificate View
+
+struct SSLCertificateView: View {
+    let server: Server
+    @State private var isRefreshing = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                if let cert = server.sslCertificate {
+                    // Status Card
+                    SSLStatusCard(certificate: cert)
+
+                    // Certificate Details
+                    GroupBox {
+                        VStack(alignment: .leading, spacing: 12) {
+                            SSLInfoRow(label: "Common Name", value: cert.commonName ?? "N/A")
+                            SSLInfoRow(label: "Issuer", value: cert.issuer ?? "N/A")
+                            SSLInfoRow(label: "Valid From", value: cert.formattedValidFrom)
+                            SSLInfoRow(label: "Valid Until", value: cert.formattedValidUntil)
+                            SSLInfoRow(label: "Days Until Expiry", value: "\(cert.daysUntilExpiry) days")
+
+                            if let serial = cert.serialNumber {
+                                SSLInfoRow(label: "Serial Number", value: serial)
+                            }
+
+                            if cert.isSelfSigned {
+                                HStack {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .foregroundStyle(.orange)
+                                    Text("Self-signed certificate")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(.orange)
+                                }
+                                .padding(.top, 4)
+                            }
+                        }
+                        .padding(8)
+                    } label: {
+                        Label("Certificate Details", systemImage: "doc.text.fill")
+                    }
+
+                    // Last Checked Info
+                    if let lastChecked = server.sslLastChecked {
+                        HStack {
+                            Text("Last checked:")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(lastChecked.formatted(date: .abbreviated, time: .shortened))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } else {
+                    // No Certificate Info
+                    ContentUnavailableView(
+                        "No Certificate Data",
+                        systemImage: "lock.slash",
+                        description: Text("SSL certificate information will appear here after the next monitoring check")
+                    )
+                }
+
+                // Refresh Button
+                HStack {
+                    Spacer()
+                    Button {
+                        refreshCertificate()
+                    } label: {
+                        Label("Refresh Certificate", systemImage: "arrow.clockwise")
+                    }
+                    .disabled(isRefreshing)
+                }
+            }
+            .padding()
+        }
+    }
+
+    private func refreshCertificate() {
+        isRefreshing = true
+        Task {
+            let result = await SSLCertificateService.shared.checkCertificate(host: server.host, port: server.port)
+            if case .success(let certInfo) = result {
+                server.updateSSLCertificate(certInfo)
+            }
+            isRefreshing = false
+        }
+    }
+}
+
+struct SSLStatusCard: View {
+    let certificate: SSLCertificateInfo
+
+    var body: some View {
+        HStack(spacing: 16) {
+            // Status Icon
+            ZStack {
+                Circle()
+                    .fill(Color(certificate.expiryStatus.color).opacity(0.15))
+                    .frame(width: 60, height: 60)
+
+                Image(systemName: certificate.expiryStatus.icon)
+                    .font(.system(size: 28))
+                    .foregroundStyle(Color(certificate.expiryStatus.color))
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(certificate.expiryStatus.rawValue)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(Color(certificate.expiryStatus.color))
+
+                if certificate.isExpired {
+                    Text("Certificate has expired!")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.red)
+                } else if certificate.daysUntilExpiry <= 7 {
+                    Text("Expires in \(certificate.daysUntilExpiry) day\(certificate.daysUntilExpiry == 1 ? "" : "s")!")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.red)
+                } else if certificate.daysUntilExpiry <= 30 {
+                    Text("Expires in \(certificate.daysUntilExpiry) days")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.orange)
+                } else {
+                    Text("Valid for \(certificate.daysUntilExpiry) more days")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                }
+
+                Text(certificate.commonName ?? "Unknown")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+            }
+
+            Spacer()
+
+            // Days counter
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(max(0, certificate.daysUntilExpiry))")
+                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(certificate.expiryStatus.color))
+                Text("days left")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(nsColor: .controlBackgroundColor))
+                .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)
+        )
+    }
+}
+
+struct SSLInfoRow: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack {
+            Text(label)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .frame(width: 120, alignment: .leading)
+
+            Text(value)
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            Spacer()
+        }
     }
 }
