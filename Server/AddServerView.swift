@@ -23,6 +23,7 @@ struct AddServerView: View {
     @State private var selectedTagNames: Set<String> = []
     @State private var newTagName = ""
     @State private var showingCreateGroup = false
+    @State private var selectedTemplate: ServerTemplate?
 
     var isValid: Bool {
         !name.isEmpty && !host.isEmpty && port > 0 && port <= 65535
@@ -31,6 +32,16 @@ struct AddServerView: View {
     var body: some View {
         NavigationStack {
             Form {
+                // Template Selector
+                Section("Quick Start") {
+                    TemplateSelector(selectedTemplate: $selectedTemplate)
+                        .onChange(of: selectedTemplate) { _, newTemplate in
+                            if let template = newTemplate {
+                                applyTemplate(template)
+                            }
+                        }
+                }
+
                 Section("Server Information") {
                     TextField("Name", text: $name)
                         .textFieldStyle(.roundedBorder)
@@ -180,6 +191,18 @@ struct AddServerView: View {
         case .ftp: return "ftp://\(host.isEmpty ? "example.com" : host):\(port)"
         case .ssh: return "ssh://\(host.isEmpty ? "example.com" : host):\(port)"
         default: return "\(host.isEmpty ? "example.com" : host):\(port)"
+        }
+    }
+
+    private func applyTemplate(_ template: ServerTemplate) {
+        serverType = template.serverType
+        port = template.defaultPort
+        notes = template.defaultNotes
+
+        // Apply default tags
+        if !template.defaultTags.isEmpty {
+            let tags = template.defaultTags.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
+            selectedTagNames = Set(tags)
         }
     }
 

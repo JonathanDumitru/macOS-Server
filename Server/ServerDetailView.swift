@@ -16,6 +16,7 @@ struct ServerDetailView: View {
     enum DetailTab: String, CaseIterable {
         case overview = "Overview"
         case metrics = "Metrics"
+        case history = "History"
         case ssl = "SSL"
         case logs = "Logs"
 
@@ -23,6 +24,7 @@ struct ServerDetailView: View {
             switch self {
             case .overview: return "info.circle"
             case .metrics: return "chart.xyaxis.line"
+            case .history: return "clock.arrow.circlepath"
             case .ssl: return "lock.fill"
             case .logs: return "list.bullet.rectangle"
             }
@@ -62,6 +64,9 @@ struct ServerDetailView: View {
 
                 ServerMetricsView(server: server)
                     .tag(DetailTab.metrics)
+
+                HistoricalChartsView(server: server)
+                    .tag(DetailTab.history)
 
                 if server.supportsSSL {
                     SSLCertificateView(server: server)

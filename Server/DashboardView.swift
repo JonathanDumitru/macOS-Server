@@ -25,6 +25,7 @@ struct DashboardView: View {
     @State private var isInBulkMode = false
     @State private var selectedServerIDs: Set<UUID> = []
     @State private var showingExportOptions = false
+    @State private var showingImportView = false
     @State private var showingBulkDeleteConfirm = false
     @State private var showingBulkMoveToGroup = false
     @AppStorage("hasLaunchedBefore") private var hasLaunchedBefore = false
@@ -106,6 +107,9 @@ struct DashboardView: View {
             .sheet(isPresented: $showingExportOptions) {
                 ExportOptionsView(servers: isInBulkMode ? selectedServers : Array(servers))
             }
+            .sheet(isPresented: $showingImportView) {
+                ImportView()
+            }
             .sheet(isPresented: $showingBulkMoveToGroup) {
                 BulkMoveToGroupView(
                     servers: selectedServers,
@@ -136,6 +140,9 @@ struct DashboardView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .exportServers)) { _ in
                 showingExportOptions = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .importServers)) { _ in
+                showingImportView = true
             }
             .onReceive(NotificationCenter.default.publisher(for: .toggleMonitoring)) { _ in
                 if monitoringService.isMonitoring {

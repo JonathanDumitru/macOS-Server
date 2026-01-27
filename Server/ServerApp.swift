@@ -24,6 +24,8 @@ struct ServerApp: App {
             ServerTag.self,
             AlertThreshold.self,
             AlertEvent.self,
+            ServerTemplate.self,
+            MaintenanceWindow.self,
             Item.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
@@ -55,6 +57,11 @@ struct ServerApp: App {
                     NotificationCenter.default.post(name: .exportServers, object: nil)
                 }
                 .keyboardShortcut("e", modifiers: [.command, .shift])
+
+                Button("Import Servers...") {
+                    NotificationCenter.default.post(name: .importServers, object: nil)
+                }
+                .keyboardShortcut("i", modifiers: [.command, .shift])
             }
 
             // View Commands
@@ -214,6 +221,7 @@ extension Notification.Name {
     static let checkServerNow = Notification.Name("checkServerNow")
     static let addServer = Notification.Name("addServer")
     static let exportServers = Notification.Name("exportServers")
+    static let importServers = Notification.Name("importServers")
     static let toggleMonitoring = Notification.Name("toggleMonitoring")
     static let refreshAll = Notification.Name("refreshAll")
     static let focusSearch = Notification.Name("focusSearch")
