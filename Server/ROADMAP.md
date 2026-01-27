@@ -4,99 +4,85 @@ Future feature ideas for Server Monitor Dashboard, organized by implementation e
 
 ---
 
-## Quick Wins (Low Effort)
+## Implemented Quick Wins
 
-### 1. Server Search/Filter Enhancement
-**Priority:** High
-**Effort:** 1-2 hours
+### 1. Server Search/Filter Enhancement ✅
+**Status:** Implemented
 
-- Add search bar to dashboard sidebar
-- Filter by server name, host, or tag
+- Search bar in dashboard sidebar
+- Filter by server name, host, tags, or group
 - Real-time filtering as user types
-- Clear search button
-
-**Files to modify:**
-- `DashboardView.swift`
+- Clear search button (X icon)
 
 ---
 
-### 2. Bulk Actions
-**Priority:** Medium
-**Effort:** 2-3 hours
+### 2. Bulk Actions ✅
+**Status:** Implemented
 
-- Select multiple servers with checkboxes
-- Bulk delete
+- Select mode toggle button
+- Select All / Deselect All
+- Bulk delete with confirmation
 - Bulk move to group
-- Bulk enable/disable monitoring
-- Select all / Deselect all
-
-**Files to modify:**
-- `DashboardView.swift`
-- `ServerListItemView.swift`
+- Bulk export selected servers
 
 ---
 
-### 3. Dark/Light Theme Toggle
-**Priority:** Low
-**Effort:** 1 hour
+### 3. Dark/Light Theme Toggle ✅
+**Status:** Implemented
 
-- Override system appearance preference
-- Settings toggle for Dark/Light/System
-- Persist preference with @AppStorage
-
-**Files to modify:**
-- `SettingsView.swift`
-- `ServerApp.swift`
+- Settings → General → Appearance
+- System / Light / Dark options
+- Persisted with @AppStorage
+- Applied via NSApp.appearance
 
 ---
 
-### 4. Export Server List
-**Priority:** Medium
-**Effort:** 2-3 hours
+### 4. Export Server List ✅
+**Status:** Implemented
 
-- Export servers to JSON
-- Export servers to CSV
-- Include/exclude credentials option
-- Export individual server or all
+- Export to JSON format (pretty-printed)
+- Export to CSV format (spreadsheet-compatible)
+- Export all servers or selected servers
+- Save dialog with file chooser
 
-**New files:**
-- `ExportService.swift`
-
-**Files to modify:**
-- `DashboardView.swift` (toolbar action)
+**New file:** `ExportService.swift`
 
 ---
 
-### 5. Keyboard Shortcuts
-**Priority:** Medium
-**Effort:** 2 hours
+### 5. Keyboard Shortcuts ✅
+**Status:** Implemented
 
 | Shortcut | Action |
 |----------|--------|
 | ⌘N | Add new server |
-| ⌘1-9 | Select server by position |
-| ⌘R | Refresh selected server |
-| ⌘⌫ | Delete selected server |
+| ⌘R | Refresh all servers |
+| ⌘⇧M | Toggle monitoring |
+| ⌘⇧E | Export servers |
 | ⌘F | Focus search |
-| Space | Toggle monitoring |
-
-**Files to modify:**
-- `DashboardView.swift`
-- `ServerApp.swift`
+| ⌘1 | Go to Dashboard |
+| ⌘2 | Go to Roles & Features |
+| ⌘3 | Go to Storage |
+| ⌘4 | Go to Networking |
+| ⌘5 | Go to Security |
+| ⌘6 | Go to Updates |
 
 ---
 
-### 6. Quick Actions Menu
-**Priority:** Medium
-**Effort:** 1-2 hours
+### 6. Quick Actions Context Menu ✅
+**Status:** Implemented
 
 Right-click context menu for servers:
-- Check Now
+- Check Now (refresh single server)
 - Copy Host
-- Open in Browser (HTTP/HTTPS)
-- SSH to Server (opens Terminal)
-- Edit Server
-- Delete Server
+- Copy Host:Port
+- Open in Browser (HTTP/HTTPS servers)
+- Open SSH in Terminal (SSH servers)
+- Export Server
+- Delete (with destructive style)
+
+---
+
+## Remaining Quick Wins
 
 **Files to modify:**
 - `ServerListItemView.swift`

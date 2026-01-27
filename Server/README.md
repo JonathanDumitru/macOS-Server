@@ -259,11 +259,26 @@ The app includes sample data generation. When you run the app, if no servers exi
 - macOS 14.0+
 - Swift 5.9+
 
+## ⌨️ Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| ⌘N | Add new server |
+| ⌘R | Refresh all servers |
+| ⌘⇧M | Toggle monitoring on/off |
+| ⌘⇧E | Export servers |
+| ⌘F | Focus search field |
+| ⌘, | Open Settings |
+| ⌘1-6 | Navigate to sections (Dashboard, Roles, Storage, etc.) |
+
 ## 💡 Tips
 
 - Use ⌘, to open Settings
-- Right-click servers for quick actions
-- Use search to filter servers
+- Right-click servers for quick actions (Check Now, Copy Host, Open in Browser, SSH Terminal)
+- Use search to filter servers by name, host, tags, or group
+- Select multiple servers with the "Select" button for bulk operations
+- Export servers to JSON or CSV for backup
+- Choose Dark/Light/System theme in Settings → General
 - Monitor response times to identify slow servers
 - Check logs for detailed information
 - Enable real metrics for SSH servers with credentials
