@@ -15,6 +15,8 @@ struct SettingsView: View {
     @AppStorage("maxLogEntries") private var maxLogEntries = 1000
     @AppStorage("maxMetricEntries") private var maxMetricEntries = 500
     
+    @State private var showingAlertThresholds = false
+
     var body: some View {
         TabView {
             GeneralSettingsView(
@@ -23,7 +25,7 @@ struct SettingsView: View {
             .tabItem {
                 Label("General", systemImage: "gear")
             }
-            
+
             NotificationSettingsView(
                 enableNotifications: $enableNotifications,
                 notifyOnStatusChange: $notifyOnStatusChange,
@@ -32,7 +34,12 @@ struct SettingsView: View {
             .tabItem {
                 Label("Notifications", systemImage: "bell")
             }
-            
+
+            AlertSettingsView(showingAlertThresholds: $showingAlertThresholds)
+                .tabItem {
+                    Label("Alerts", systemImage: "exclamationmark.triangle")
+                }
+
             DataSettingsView(
                 maxLogEntries: $maxLogEntries,
                 maxMetricEntries: $maxMetricEntries
@@ -41,7 +48,10 @@ struct SettingsView: View {
                 Label("Data", systemImage: "cylinder")
             }
         }
-        .frame(width: 500, height: 400)
+        .frame(width: 550, height: 450)
+        .sheet(isPresented: $showingAlertThresholds) {
+            AlertThresholdsView()
+        }
     }
 }
 
@@ -212,6 +222,92 @@ struct DataSettingsView: View {
     
     private func clearMetrics() {
         // Implementation for clearing metrics
+    }
+}
+
+// MARK: - Alert Settings View
+
+struct AlertSettingsView: View {
+    @Binding var showingAlertThresholds: Bool
+    @AppStorage("enableThresholdAlerts") private var enableThresholdAlerts = true
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Enable Threshold Alerts", isOn: $enableThresholdAlerts)
+
+                Text("Get notified when server metrics exceed configured thresholds")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Threshold Alerts")
+            }
+
+            Section {
+                Button {
+                    showingAlertThresholds = true
+                } label: {
+                    HStack {
+                        Label("Configure Thresholds", systemImage: "slider.horizontal.3")
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .buttonStyle(.plain)
+
+                Text("Set custom thresholds for CPU, memory, disk usage, and response time")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Threshold Configuration")
+            }
+
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Default Thresholds")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    HStack(spacing: 16) {
+                        ThresholdPreview(metric: "CPU", value: "80%", severity: .warning)
+                        ThresholdPreview(metric: "Memory", value: "85%", severity: .warning)
+                        ThresholdPreview(metric: "Disk", value: "90%", severity: .warning)
+                    }
+                }
+            } header: {
+                Text("Quick Reference")
+            }
+        }
+        .formStyle(.grouped)
+        .padding()
+    }
+}
+
+struct ThresholdPreview: View {
+    let metric: String
+    let value: String
+    let severity: AlertSeverity
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Image(systemName: severity.icon)
+                .foregroundStyle(Color(severity.color))
+
+            Text(metric)
+                .font(.system(size: 10, weight: .medium))
+
+            Text("> \(value)")
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
     }
 }
 

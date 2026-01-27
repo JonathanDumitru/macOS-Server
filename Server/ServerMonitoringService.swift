@@ -159,7 +159,78 @@ class ServerMonitoringService: ObservableObject {
         metric.server = server
         modelContext.insert(metric)
 
+        // Check alert thresholds
+        await checkAlertThresholds(server: server, metric: metric, responseTime: result.responseTime)
+
         try? modelContext.save()
+    }
+
+    // MARK: - Alert Threshold Checking
+
+    private func checkAlertThresholds(server: Server, metric: ServerMetric, responseTime: Double) async {
+        // Fetch all enabled thresholds
+        let descriptor = FetchDescriptor<AlertThreshold>(
+            predicate: #Predicate { $0.isEnabled }
+        )
+        guard let thresholds = try? modelContext.fetch(descriptor) else { return }
+
+        for threshold in thresholds {
+            let currentValue: Double?
+
+            switch threshold.metricType {
+            case .cpuUsage:
+                currentValue = metric.cpuUsage
+            case .memoryUsage:
+                currentValue = metric.memoryUsage
+            case .diskUsage:
+                currentValue = metric.diskUsage
+            case .responseTime:
+                currentValue = responseTime
+            case .networkIn:
+                currentValue = metric.networkIn
+            case .networkOut:
+                currentValue = metric.networkOut
+            }
+
+            guard let value = currentValue else { continue }
+
+            // Check if threshold is exceeded
+            if threshold.isExceeded(by: value) {
+                // Check cooldown
+                if threshold.shouldAlert(forServerID: server.id.uuidString) {
+                    // Record the alert
+                    threshold.recordAlert(forServerID: server.id.uuidString)
+
+                    // Create alert event
+                    let alertEvent = AlertEvent(
+                        metricType: threshold.metricType,
+                        thresholdValue: threshold.thresholdValue,
+                        actualValue: value,
+                        severity: threshold.severity,
+                        serverName: server.name,
+                        serverID: server.id.uuidString
+                    )
+                    modelContext.insert(alertEvent)
+
+                    // Log the threshold breach
+                    let log = ServerLog(
+                        timestamp: Date(),
+                        message: "Threshold exceeded: \(threshold.metricType.rawValue) is \(String(format: "%.1f", value))\(threshold.metricType.unit) (threshold: \(threshold.comparison.rawValue) \(String(format: "%.0f", threshold.thresholdValue))\(threshold.metricType.unit))",
+                        level: threshold.severity == .critical ? .error : .warning
+                    )
+                    log.server = server
+                    modelContext.insert(log)
+
+                    // Send notification
+                    await notificationService.notifyThresholdExceeded(
+                        serverName: server.name,
+                        metricName: threshold.metricType.rawValue,
+                        currentValue: value,
+                        thresholdValue: threshold.thresholdValue
+                    )
+                }
+            }
+        }
     }
 
     // MARK: - Uptime Tracking

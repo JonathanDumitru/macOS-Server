@@ -21,6 +21,8 @@ struct ServerApp: App {
             UptimeRecord.self,
             ServerGroup.self,
             ServerTag.self,
+            AlertThreshold.self,
+            AlertEvent.self,
             Item.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
