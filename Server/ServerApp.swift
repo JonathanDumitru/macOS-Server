@@ -41,6 +41,74 @@ struct ServerApp: App {
         }
         .modelContainer(sharedModelContainer)
         .defaultSize(width: 1200, height: 800)
+        .commands {
+            // Server Commands
+            CommandGroup(after: .newItem) {
+                Button("Add Server") {
+                    NotificationCenter.default.post(name: .addServer, object: nil)
+                }
+                .keyboardShortcut("n", modifiers: [.command])
+
+                Divider()
+
+                Button("Export Servers...") {
+                    NotificationCenter.default.post(name: .exportServers, object: nil)
+                }
+                .keyboardShortcut("e", modifiers: [.command, .shift])
+            }
+
+            // View Commands
+            CommandGroup(after: .sidebar) {
+                Button("Toggle Monitoring") {
+                    NotificationCenter.default.post(name: .toggleMonitoring, object: nil)
+                }
+                .keyboardShortcut("m", modifiers: [.command, .shift])
+
+                Button("Refresh All") {
+                    NotificationCenter.default.post(name: .refreshAll, object: nil)
+                }
+                .keyboardShortcut("r", modifiers: [.command])
+
+                Divider()
+
+                Button("Focus Search") {
+                    NotificationCenter.default.post(name: .focusSearch, object: nil)
+                }
+                .keyboardShortcut("f", modifiers: [.command])
+
+                Divider()
+
+                Button("Dashboard") {
+                    NotificationCenter.default.post(name: .navigateToSection, object: NavigationSection.dashboard)
+                }
+                .keyboardShortcut("1", modifiers: [.command])
+
+                Button("Roles & Features") {
+                    NotificationCenter.default.post(name: .navigateToSection, object: NavigationSection.rolesFeatures)
+                }
+                .keyboardShortcut("2", modifiers: [.command])
+
+                Button("Storage") {
+                    NotificationCenter.default.post(name: .navigateToSection, object: NavigationSection.storage)
+                }
+                .keyboardShortcut("3", modifiers: [.command])
+
+                Button("Networking") {
+                    NotificationCenter.default.post(name: .navigateToSection, object: NavigationSection.networking)
+                }
+                .keyboardShortcut("4", modifiers: [.command])
+
+                Button("Security") {
+                    NotificationCenter.default.post(name: .navigateToSection, object: NavigationSection.security)
+                }
+                .keyboardShortcut("5", modifiers: [.command])
+
+                Button("Updates") {
+                    NotificationCenter.default.post(name: .navigateToSection, object: NavigationSection.updates)
+                }
+                .keyboardShortcut("6", modifiers: [.command])
+            }
+        }
 
         #if os(macOS)
         Settings {
@@ -144,4 +212,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 extension Notification.Name {
     static let navigateToServer = Notification.Name("navigateToServer")
     static let checkServerNow = Notification.Name("checkServerNow")
+    static let addServer = Notification.Name("addServer")
+    static let exportServers = Notification.Name("exportServers")
+    static let toggleMonitoring = Notification.Name("toggleMonitoring")
+    static let refreshAll = Notification.Name("refreshAll")
+    static let focusSearch = Notification.Name("focusSearch")
+    static let navigateToSection = Notification.Name("navigateToSection")
 }

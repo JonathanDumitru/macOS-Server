@@ -55,14 +55,46 @@ struct SettingsView: View {
     }
 }
 
+enum AppAppearance: String, CaseIterable {
+    case system = "System"
+    case light = "Light"
+    case dark = "Dark"
+
+    var nsAppearance: NSAppearance? {
+        switch self {
+        case .system: return nil
+        case .light: return NSAppearance(named: .aqua)
+        case .dark: return NSAppearance(named: .darkAqua)
+        }
+    }
+}
+
 struct GeneralSettingsView: View {
     @Binding var monitoringInterval: Int
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra = true
     @AppStorage("launchAtLogin") private var launchAtLogin = false
     @AppStorage("enableRealMetrics") private var enableRealMetrics = true
+    @AppStorage("appAppearance") private var appAppearance: String = AppAppearance.system.rawValue
 
     var body: some View {
         Form {
+            Section {
+                Picker("Appearance", selection: $appAppearance) {
+                    ForEach(AppAppearance.allCases, id: \.rawValue) { appearance in
+                        Text(appearance.rawValue).tag(appearance.rawValue)
+                    }
+                }
+                .onChange(of: appAppearance) { _, newValue in
+                    applyAppearance(AppAppearance(rawValue: newValue) ?? .system)
+                }
+
+                Text("Choose between light, dark, or system appearance")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Appearance")
+            }
+
             Section {
                 Picker("Monitoring Interval", selection: $monitoringInterval) {
                     Text("15 seconds").tag(15)
@@ -122,6 +154,13 @@ struct GeneralSettingsView: View {
         }
         .formStyle(.grouped)
         .padding()
+        .onAppear {
+            applyAppearance(AppAppearance(rawValue: appAppearance) ?? .system)
+        }
+    }
+
+    private func applyAppearance(_ appearance: AppAppearance) {
+        NSApp.appearance = appearance.nsAppearance
     }
 }
 
