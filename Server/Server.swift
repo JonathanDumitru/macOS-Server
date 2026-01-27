@@ -28,6 +28,10 @@ final class Server {
     var totalOfflineSeconds: Double = 0 // Cumulative offline time
     var totalWarningSeconds: Double = 0 // Cumulative warning time
 
+    // Organization
+    var group: ServerGroup? // Optional group assignment
+    var tagNames: [String] = [] // Tag names stored as strings for simplicity
+
     // Relationships
     @Relationship(deleteRule: .cascade, inverse: \ServerMetric.server)
     var metrics: [ServerMetric] = []

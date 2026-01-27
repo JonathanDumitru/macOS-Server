@@ -12,22 +12,45 @@ import Charts
 struct DashboardView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var servers: [Server]
+    @Query(sort: \ServerGroup.sortOrder) private var groups: [ServerGroup]
     @StateObject private var monitoringService: ServerMonitoringService
     @State private var appModel = AppModel()
     @State private var showingAddServer = false
     @State private var showingWelcome = false
     @State private var showingQuickAccessCustomization = false
+    @State private var showingGroupManagement = false
+    @State private var selectedGroupFilter: ServerGroup?
+    @State private var selectedTagFilter: String?
     @AppStorage("hasLaunchedBefore") private var hasLaunchedBefore = false
-    
+
     init(modelContext: ModelContext) {
         _monitoringService = StateObject(wrappedValue: ServerMonitoringService(modelContext: modelContext))
+    }
+
+    var filteredServers: [Server] {
+        var result = servers
+
+        // Filter by group
+        if let group = selectedGroupFilter {
+            result = result.filter { $0.group?.id == group.id }
+        }
+
+        // Filter by tag
+        if let tag = selectedTagFilter {
+            result = result.filter { $0.tagNames.contains(tag) }
+        }
+
+        return result
     }
     
     var body: some View {
         NavigationSplitView {
             SidebarView(
                 selectedSection: $appModel.selectedSection,
-                servers: servers,
+                servers: filteredServers,
+                groups: groups,
+                selectedGroupFilter: $selectedGroupFilter,
+                selectedTagFilter: $selectedTagFilter,
                 isMonitoring: monitoringService.isMonitoring,
                 quickAccessItems: appModel.quickAccessItems.filter { $0.isPinned }.sorted { $0.order < $1.order },
                 onToggleMonitoring: {
@@ -38,9 +61,10 @@ struct DashboardView: View {
                     }
                 },
                 onAddServer: { showingAddServer = true },
-                onCustomizeQuickAccess: { showingQuickAccessCustomization = true }
+                onCustomizeQuickAccess: { showingQuickAccessCustomization = true },
+                onManageGroups: { showingGroupManagement = true }
             )
-            .navigationSplitViewColumnWidth(min: 240, ideal: 260, max: 280)
+            .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 320)
             .sheet(isPresented: $showingAddServer) {
                 AddServerView()
             }
@@ -49,6 +73,9 @@ struct DashboardView: View {
             }
             .sheet(isPresented: $showingQuickAccessCustomization) {
                 QuickAccessCustomizationView(appModel: appModel)
+            }
+            .sheet(isPresented: $showingGroupManagement) {
+                GroupManagementView()
             }
             .onAppear {
                 if !hasLaunchedBefore && servers.isEmpty {
@@ -59,7 +86,7 @@ struct DashboardView: View {
         } detail: {
             NavigationContentView(
                 selectedSection: appModel.selectedSection,
-                servers: servers,
+                servers: filteredServers,
                 monitoringService: monitoringService,
                 modelContext: modelContext,
                 appModel: appModel
@@ -135,24 +162,33 @@ enum NavigationSection: String, CaseIterable, Identifiable, Codable {
 struct SidebarView: View {
     @Binding var selectedSection: NavigationSection
     let servers: [Server]
+    let groups: [ServerGroup]
+    @Binding var selectedGroupFilter: ServerGroup?
+    @Binding var selectedTagFilter: String?
     let isMonitoring: Bool
     let quickAccessItems: [QuickAccessItem]
     let onToggleMonitoring: () -> Void
     let onAddServer: () -> Void
     let onCustomizeQuickAccess: () -> Void
-    
+    let onManageGroups: () -> Void
+
     var onlineCount: Int {
         servers.filter { $0.status == .online }.count
     }
-    
+
     var offlineCount: Int {
         servers.filter { $0.status == .offline }.count
     }
-    
+
     var warningCount: Int {
         servers.filter { $0.status == .warning }.count
     }
-    
+
+    // Get unique tags from all servers
+    var allTags: [String] {
+        Array(Set(servers.flatMap { $0.tagNames })).sorted()
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // App Identity Block
@@ -161,12 +197,12 @@ struct SidebarView: View {
                     Image(systemName: "server.rack")
                         .font(.system(size: 26, weight: .semibold))
                         .foregroundStyle(.blue)
-                    
+
                     VStack(alignment: .leading, spacing: 1) {
                         Text("SERVER-2025")
                             .font(.system(size: 16, weight: .bold, design: .default))
                             .foregroundStyle(.primary)
-                        
+
                         Text("Datacenter Edition")
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(.secondary)
@@ -177,9 +213,9 @@ struct SidebarView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 16)
             .background(Color(nsColor: .windowBackgroundColor))
-            
+
             Divider()
-            
+
             // Navigation Content
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
@@ -191,16 +227,96 @@ struct SidebarView: View {
                             action: { selectedSection = section }
                         )
                     }
-                    
+
+                    // Server Groups Section
+                    if !groups.isEmpty {
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack {
+                                Text("GROUPS")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+
+                                Spacer()
+
+                                Button(action: onManageGroups) {
+                                    Image(systemName: "ellipsis.circle")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Manage Groups")
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.top, 16)
+                            .padding(.bottom, 4)
+
+                            // All Servers option
+                            GroupFilterItem(
+                                name: "All Servers",
+                                icon: "square.grid.2x2",
+                                color: .blue,
+                                count: servers.count,
+                                isSelected: selectedGroupFilter == nil && selectedTagFilter == nil
+                            ) {
+                                selectedGroupFilter = nil
+                                selectedTagFilter = nil
+                            }
+
+                            // Group filters
+                            ForEach(groups) { group in
+                                GroupFilterItem(
+                                    name: group.name,
+                                    icon: group.iconName,
+                                    color: group.color,
+                                    count: group.servers.count,
+                                    isSelected: selectedGroupFilter?.id == group.id
+                                ) {
+                                    selectedGroupFilter = group
+                                    selectedTagFilter = nil
+                                }
+                            }
+                        }
+                    }
+
+                    // Tags Section
+                    if !allTags.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("TAGS")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 14)
+                                .padding(.top, 12)
+
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 6) {
+                                    ForEach(allTags, id: \.self) { tag in
+                                        TagFilterChip(
+                                            name: tag,
+                                            isSelected: selectedTagFilter == tag
+                                        ) {
+                                            if selectedTagFilter == tag {
+                                                selectedTagFilter = nil
+                                            } else {
+                                                selectedTagFilter = tag
+                                                selectedGroupFilter = nil
+                                            }
+                                        }
+                                    }
+                                }
+                                .padding(.horizontal, 14)
+                            }
+                        }
+                    }
+
                     // Quick Access Section
                     VStack(alignment: .leading, spacing: 2) {
                         HStack {
                             Text("QUICK ACCESS")
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundStyle(.secondary)
-                            
+
                             Spacer()
-                            
+
                             Button(action: onCustomizeQuickAccess) {
                                 Image(systemName: "ellipsis.circle")
                                     .font(.system(size: 12))
@@ -212,7 +328,7 @@ struct SidebarView: View {
                         .padding(.horizontal, 14)
                         .padding(.top, 16)
                         .padding(.bottom, 4)
-                        
+
                         ForEach(quickAccessItems) { item in
                             NavigationItemView(
                                 section: item.destination,
@@ -224,21 +340,21 @@ struct SidebarView: View {
                 }
                 .padding(.vertical, 8)
             }
-            
+
             Spacer()
-            
+
             // Server Status Metrics (Bottom)
             VStack(spacing: 0) {
                 Divider()
-                
+
                 VStack(spacing: 6) {
                     HStack {
                         Text("SERVER STATUS")
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(.secondary)
-                        
+
                         Spacer()
-                        
+
                         if isMonitoring {
                             HStack(spacing: 3) {
                                 Circle()
@@ -250,13 +366,13 @@ struct SidebarView: View {
                             }
                         }
                     }
-                    
+
                     HStack(spacing: 8) {
                         StatusBadge(count: onlineCount, color: .green, label: "Online")
                         StatusBadge(count: offlineCount, color: .red, label: "Offline")
                         StatusBadge(count: warningCount, color: .orange, label: "Warning")
                     }
-                    
+
                     HStack(spacing: 6) {
                         Button(action: onToggleMonitoring) {
                             Label(
@@ -268,7 +384,7 @@ struct SidebarView: View {
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
-                        
+
                         Button(action: onAddServer) {
                             Label("Add", systemImage: "plus")
                                 .font(.system(size: 11, weight: .medium))
@@ -283,6 +399,81 @@ struct SidebarView: View {
             .background(Color(nsColor: .controlBackgroundColor))
         }
         .background(Color(nsColor: .windowBackgroundColor).opacity(0.95))
+    }
+}
+
+// MARK: - Group Filter Item
+
+struct GroupFilterItem: View {
+    let name: String
+    let icon: String
+    let color: Color
+    let count: Int
+    let isSelected: Bool
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(isSelected ? .white : color)
+                    .frame(width: 16)
+
+                Text(name)
+                    .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                    .foregroundStyle(isSelected ? .white : .primary)
+
+                Spacer()
+
+                Text("\(count)")
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .foregroundStyle(isSelected ? .white.opacity(0.8) : .secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule()
+                            .fill(isSelected ? Color.white.opacity(0.2) : Color.secondary.opacity(0.15))
+                    )
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(isSelected ? color : (isHovered ? Color(nsColor: .controlBackgroundColor) : Color.clear))
+            )
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 6)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+    }
+}
+
+// MARK: - Tag Filter Chip
+
+struct TagFilterChip: View {
+    let name: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(name)
+                .font(.system(size: 10, weight: .medium))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(
+                    Capsule()
+                        .fill(isSelected ? Color.accentColor : Color.secondary.opacity(0.15))
+                )
+                .foregroundStyle(isSelected ? .white : .primary)
+        }
+        .buttonStyle(.plain)
     }
 }
 
