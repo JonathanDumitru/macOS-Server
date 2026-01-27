@@ -75,26 +75,99 @@ struct NotificationSettingsView: View {
     @Binding var enableNotifications: Bool
     @Binding var notifyOnStatusChange: Bool
     @Binding var notifyOnError: Bool
-    
+    @StateObject private var notificationService = NotificationService.shared
+
     var body: some View {
         Form {
             Section {
-                Toggle("Enable Notifications", isOn: $enableNotifications)
-                
-                Toggle("Status Changes", isOn: $notifyOnStatusChange)
-                    .disabled(!enableNotifications)
-                
-                Toggle("Errors", isOn: $notifyOnError)
-                    .disabled(!enableNotifications)
+                HStack {
+                    Text("System Permission")
+                    Spacer()
+                    Text(authorizationStatusText)
+                        .foregroundStyle(authorizationStatusColor)
+                }
+
+                if notificationService.authorizationStatus == .notDetermined {
+                    Button("Request Permission") {
+                        Task {
+                            await notificationService.requestAuthorization()
+                        }
+                    }
+                } else if notificationService.authorizationStatus == .denied {
+                    Button("Open System Settings") {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.notifications") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                    Text("Notifications are disabled in System Settings. Click above to enable them.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             } header: {
-                Text("Notification Settings")
+                Text("Permission Status")
+            }
+
+            Section {
+                Toggle("Enable Notifications", isOn: $enableNotifications)
+                    .disabled(!notificationService.isAuthorized)
+
+                Toggle("Status Changes", isOn: $notifyOnStatusChange)
+                    .disabled(!enableNotifications || !notificationService.isAuthorized)
+
+                Toggle("Errors", isOn: $notifyOnError)
+                    .disabled(!enableNotifications || !notificationService.isAuthorized)
+            } header: {
+                Text("Notification Preferences")
             } footer: {
                 Text("Receive notifications when server status changes or errors occur")
                     .font(.caption)
             }
+
+            Section {
+                Button("Send Test Notification") {
+                    Task {
+                        await notificationService.notifyServerStatusChange(
+                            serverName: "Test Server",
+                            previousStatus: .online,
+                            newStatus: .offline,
+                            errorMessage: "This is a test notification"
+                        )
+                    }
+                }
+                .disabled(!notificationService.isAuthorized || !enableNotifications)
+
+                Button("Clear All Notifications", role: .destructive) {
+                    notificationService.clearAllNotifications()
+                }
+            } header: {
+                Text("Actions")
+            }
         }
         .formStyle(.grouped)
         .padding()
+        .task {
+            await notificationService.checkAuthorizationStatus()
+        }
+    }
+
+    private var authorizationStatusText: String {
+        switch notificationService.authorizationStatus {
+        case .authorized: return "Authorized"
+        case .denied: return "Denied"
+        case .notDetermined: return "Not Requested"
+        case .provisional: return "Provisional"
+        case .ephemeral: return "Ephemeral"
+        @unknown default: return "Unknown"
+        }
+    }
+
+    private var authorizationStatusColor: Color {
+        switch notificationService.authorizationStatus {
+        case .authorized, .provisional, .ephemeral: return .green
+        case .denied: return .red
+        case .notDetermined: return .orange
+        @unknown default: return .gray
+        }
     }
 }
 

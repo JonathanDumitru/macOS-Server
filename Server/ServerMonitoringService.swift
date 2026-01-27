@@ -36,11 +36,14 @@ class ServerMonitoringService: ObservableObject {
     private var monitoringTask: Task<Void, Never>?
 
     private let modelContext: ModelContext
+    private let notificationService = NotificationService.shared
     private let connectionTimeout: TimeInterval = 10.0
     private let maxRetries = 2
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
+        // Setup notification categories on init
+        notificationService.setupNotificationCategories()
     }
 
     func startMonitoring() {
@@ -113,6 +116,22 @@ class ServerMonitoringService: ObservableObject {
             )
             statusChangeLog.server = server
             modelContext.insert(statusChangeLog)
+
+            // Send notification for status change
+            await notificationService.notifyServerStatusChange(
+                serverName: server.name,
+                previousStatus: previousStatus,
+                newStatus: result.status,
+                errorMessage: result.errorMessage
+            )
+        }
+
+        // Send error notification if offline (even if status didn't change)
+        if result.status == .offline, let errorMessage = result.errorMessage {
+            await notificationService.notifyError(
+                serverName: server.name,
+                errorMessage: errorMessage
+            )
         }
 
         let log = ServerLog(
