@@ -195,8 +195,9 @@ struct ServerDetailHeaderView: View {
 }
 
 struct ServerOverviewView: View {
-    let server: Server
+    @Bindable var server: Server
     @State private var selectedUptimePeriod: UptimePeriod = .day
+    @State private var showingCredentialsEditor = false
 
     var body: some View {
         ScrollView {
@@ -302,6 +303,13 @@ struct ServerOverviewView: View {
                     Label("Uptime Statistics", systemImage: "chart.bar.fill")
                 }
 
+                // Credentials Section (for servers that support it)
+                if server.supportsCredentials {
+                    CredentialsSummaryView(server: server) {
+                        showingCredentialsEditor = true
+                    }
+                }
+
                 // Notes
                 GroupBox("Notes") {
                     if server.notes.isEmpty {
@@ -336,6 +344,9 @@ struct ServerOverviewView: View {
                 }
             }
             .padding()
+        }
+        .sheet(isPresented: $showingCredentialsEditor) {
+            CredentialsEditorView(server: server)
         }
     }
 

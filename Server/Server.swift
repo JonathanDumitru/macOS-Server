@@ -37,6 +37,10 @@ final class Server {
     var sslLastChecked: Date?
     var sslExpiryDays: Int? // Cached for quick access
 
+    // Credentials (stored in Keychain, this just tracks if they exist)
+    var hasStoredCredentials: Bool = false
+    var credentialUsername: String? // Username is stored here for display, password is in Keychain
+
     // Relationships
     @Relationship(deleteRule: .cascade, inverse: \ServerMetric.server)
     var metrics: [ServerMetric] = []
@@ -222,6 +226,44 @@ final class Server {
         sslCertificateJSON = nil
         sslLastChecked = nil
         sslExpiryDays = nil
+    }
+
+    // MARK: - Credentials Management
+
+    /// Whether this server type typically needs credentials
+    var supportsCredentials: Bool {
+        switch serverType {
+        case .ssh, .ftp, .database:
+            return true
+        case .http, .https, .custom:
+            return false
+        }
+    }
+
+    /// Load credentials from Keychain
+    func loadCredentials() -> ServerCredentials? {
+        try? KeychainService.shared.loadCredentials(forServerID: id.uuidString)
+    }
+
+    /// Save credentials to Keychain
+    func saveCredentials(_ credentials: ServerCredentials) throws {
+        try KeychainService.shared.saveCredentials(credentials, forServerID: id.uuidString)
+        hasStoredCredentials = true
+        credentialUsername = credentials.username
+    }
+
+    /// Delete credentials from Keychain
+    func deleteCredentials() throws {
+        try KeychainService.shared.deleteCredentials(forServerID: id.uuidString)
+        hasStoredCredentials = false
+        credentialUsername = nil
+    }
+
+    /// Update credentials in Keychain
+    func updateCredentials(_ credentials: ServerCredentials) throws {
+        try KeychainService.shared.updateCredentials(credentials, forServerID: id.uuidString)
+        hasStoredCredentials = true
+        credentialUsername = credentials.username
     }
 }
 
