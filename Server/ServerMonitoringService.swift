@@ -54,6 +54,9 @@ class ServerMonitoringService: ObservableObject {
     func checkServer(_ server: Server) async {
         let startTime = Date()
 
+        // Store previous status for notification comparison
+        let previousStatus = NotificationService.shared.getPreviousStatus(for: server)
+
         do {
             let status = try await pingServer(host: server.host, port: server.port, type: server.serverType)
             let responseTime = Date().timeIntervalSince(startTime) * 1000 // Convert to ms
@@ -61,6 +64,9 @@ class ServerMonitoringService: ObservableObject {
             server.status = status
             server.lastChecked = Date()
             server.responseTime = responseTime
+
+            // Check for status change and send notification
+            NotificationService.shared.checkServerStatusChange(server: server, previousStatus: previousStatus)
 
             // Record uptime check
             uptimeTrackingService.recordCheck(
@@ -70,6 +76,9 @@ class ServerMonitoringService: ObservableObject {
                 statusCode: nil,
                 errorMessage: status == .online ? nil : "Status: \(status.rawValue)"
             )
+
+            // Check response time threshold for notifications (default 1000ms)
+            NotificationService.shared.checkResponseThreshold(server: server, threshold: 1000)
 
             // Log the check
             let log = ServerLog(
@@ -102,6 +111,9 @@ class ServerMonitoringService: ObservableObject {
         } catch {
             server.status = .offline
             server.lastChecked = Date()
+
+            // Check for status change and send notification
+            NotificationService.shared.checkServerStatusChange(server: server, previousStatus: previousStatus)
 
             // Record uptime check (failed)
             uptimeTrackingService.recordCheck(
@@ -232,7 +244,7 @@ class ServerMonitoringService: ObservableObject {
                 server.sslCertificate = certInfo
             }
 
-            // Log SSL check
+            // Log SSL check and send notification
             if let days = certInfo.daysUntilExpiry, days <= 30 {
                 let log = ServerLog(
                     timestamp: Date(),
@@ -241,6 +253,9 @@ class ServerMonitoringService: ObservableObject {
                 )
                 log.server = server
                 modelContext.insert(log)
+
+                // Send SSL expiry notification
+                NotificationService.shared.sendSSLExpiryNotification(server: server, daysRemaining: days)
             }
         } catch {
             // Log SSL check error
