@@ -16,13 +16,95 @@ class HealthCheckService {
     static let shared = HealthCheckService()
 
     private var modelContext: ModelContext?
-    private var checkTask: Task<Void, Never>?
-    private var isRunning = false
+    private var scheduledTask: Task<Void, Never>?
+    private(set) var isRunning = false
+
+    // Default interval for checks without custom interval (5 minutes)
+    private let defaultCheckInterval: TimeInterval = 300
 
     private init() {}
 
     func configure(modelContext: ModelContext) {
         self.modelContext = modelContext
+        startScheduledChecks()
+    }
+
+    // MARK: - Scheduled Checks
+
+    func startScheduledChecks() {
+        guard !isRunning else { return }
+        isRunning = true
+
+        scheduledTask = Task {
+            logger.info("Health check scheduler started")
+
+            while !Task.isCancelled && isRunning {
+                await runDueHealthChecks()
+                // Check every minute for checks that are due
+                try? await Task.sleep(for: .seconds(60))
+            }
+
+            logger.info("Health check scheduler stopped")
+        }
+    }
+
+    func stopScheduledChecks() {
+        isRunning = false
+        scheduledTask?.cancel()
+        scheduledTask = nil
+    }
+
+    private func runDueHealthChecks() async {
+        guard let context = modelContext else { return }
+
+        let descriptor = FetchDescriptor<HealthCheck>(
+            predicate: #Predicate { $0.isEnabled }
+        )
+
+        guard let checks = try? context.fetch(descriptor) else { return }
+
+        let now = Date()
+
+        for check in checks {
+            let interval = check.checkIntervalSeconds > 0
+                ? TimeInterval(check.checkIntervalSeconds)
+                : defaultCheckInterval
+
+            // Check if enough time has passed since last check
+            let shouldRun: Bool
+            if let lastCheck = check.lastCheckTime {
+                shouldRun = now.timeIntervalSince(lastCheck) >= interval
+            } else {
+                shouldRun = true // Never run before
+            }
+
+            if shouldRun {
+                let result = await runHealthCheck(check)
+                check.recordResult(
+                    passed: result.passed,
+                    message: result.message,
+                    responseTime: result.responseTime
+                )
+
+                if !result.passed {
+                    logger.warning("Scheduled health check '\(check.name)' failed: \(result.message)")
+
+                    // Create incident for consecutive failures
+                    if check.consecutiveFailures >= 3 {
+                        if let server = getServer(for: check) {
+                            IncidentService.shared.createWarningIncident(
+                                for: server,
+                                reason: "Health check '\(check.name)' failed \(check.consecutiveFailures) times consecutively"
+                            )
+                        }
+                    }
+                } else {
+                    logger.info("Scheduled health check '\(check.name)' passed")
+                }
+            }
+        }
+
+        try? context.save()
     }
 
     // MARK: - Health Check Execution

@@ -113,7 +113,11 @@ class MaintenanceService: ObservableObject {
             }
         }
 
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            logger.error("Failed to save maintenance window changes: \(error.localizedDescription)")
+        }
         refreshMaintenance()
     }
 

@@ -280,9 +280,14 @@ struct MenuBarServerRow: View {
 // MARK: - Preview
 
 #Preview {
-    let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: Server.self, configurations: config)
-
-    return MenuBarPopoverView(modelContainer: container)
-        .modelContainer(container)
+    do {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Server.self, configurations: config)
+        return MenuBarPopoverView(modelContainer: container)
+            .modelContainer(container)
+    } catch {
+        return Text("Preview Error: \(error.localizedDescription)")
+            .foregroundStyle(.red)
+            .frame(width: 280, height: 400)
+    }
 }

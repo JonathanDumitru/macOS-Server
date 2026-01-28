@@ -23,6 +23,12 @@ struct DashboardView: View {
     @State private var statusFilter: ServerStatus?
     @AppStorage("hasLaunchedBefore") private var hasLaunchedBefore = false
 
+    // Import/Export alerts
+    @State private var showImportAlert = false
+    @State private var importAlertTitle = ""
+    @State private var importAlertMessage = ""
+    @State private var importAlertIsError = false
+
     init(modelContext: ModelContext) {
         _monitoringService = StateObject(wrappedValue: ServerMonitoringService(modelContext: modelContext))
     }
@@ -114,6 +120,11 @@ struct DashboardView: View {
             ) { result in
                 handleImport(result)
             }
+            .alert(importAlertTitle, isPresented: $showImportAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(importAlertMessage)
+            }
         } detail: {
             NavigationContentView(
                 selectedSection: appModel.selectedSection,
@@ -138,14 +149,34 @@ struct DashboardView: View {
                     existingServers: servers
                 )
 
-                // Could show an alert with import results
-                print("Imported \(importResult.imported) servers, skipped \(importResult.skipped) duplicates")
+                // Show success alert
+                importAlertTitle = "Import Complete"
+                if importResult.imported > 0 && importResult.skipped > 0 {
+                    importAlertMessage = "Successfully imported \(importResult.imported) server(s). Skipped \(importResult.skipped) duplicate(s)."
+                } else if importResult.imported > 0 {
+                    importAlertMessage = "Successfully imported \(importResult.imported) server(s)."
+                } else if importResult.skipped > 0 {
+                    importAlertMessage = "No new servers imported. \(importResult.skipped) server(s) already exist."
+                } else {
+                    importAlertMessage = "No servers found in the file."
+                }
+                importAlertIsError = false
+                showImportAlert = true
+
             } catch {
-                print("Import failed: \(error)")
+                // Show error alert
+                importAlertTitle = "Import Failed"
+                importAlertMessage = error.localizedDescription
+                importAlertIsError = true
+                showImportAlert = true
             }
 
         case .failure(let error):
-            print("File selection failed: \(error)")
+            // Show error alert for file selection failure
+            importAlertTitle = "File Selection Failed"
+            importAlertMessage = error.localizedDescription
+            importAlertIsError = true
+            showImportAlert = true
         }
     }
 }
@@ -564,8 +595,14 @@ struct NavigationContentView: View {
                 
             case .updates:
                 UpdatesView(appModel: appModel)
-                
-            default:
+
+            case .eventViewer:
+                EventViewerView()
+
+            case .services:
+                ServicesView()
+
+            case .performanceMonitor, .diskManagement, .taskManager, .powershell:
                 PlaceholderSectionView(section: selectedSection)
             }
         }

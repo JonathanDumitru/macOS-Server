@@ -98,9 +98,13 @@ class IncidentService {
 
         context.insert(incident)
         activeIncidents[server.id] = incident
-        try? context.save()
 
-        logger.info("Created warning incident for \(server.name)")
+        do {
+            try context.save()
+            logger.info("Created warning incident for \(server.name)")
+        } catch {
+            logger.error("Failed to save warning incident: \(error.localizedDescription)")
+        }
     }
 
     func createHighResponseTimeIncident(for server: Server, responseTime: Double, threshold: Double) {

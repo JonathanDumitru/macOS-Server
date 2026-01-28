@@ -8,6 +8,7 @@
 import SwiftUI
 import SwiftData
 import UserNotifications
+import ServiceManagement
 
 struct SettingsView: View {
     @AppStorage("monitoringInterval") private var monitoringInterval = 30
@@ -60,7 +61,8 @@ struct SettingsView: View {
 struct GeneralSettingsView: View {
     @Binding var monitoringInterval: Int
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
-    @AppStorage("launchAtLogin") private var launchAtLogin = false
+    @State private var launchAtLogin = false
+    @State private var launchAtLoginError: String?
 
     var body: some View {
         Form {
@@ -97,19 +99,59 @@ struct GeneralSettingsView: View {
 
             Section {
                 Toggle("Launch at Login", isOn: $launchAtLogin)
+                    .onChange(of: launchAtLogin) { _, newValue in
+                        updateLaunchAtLogin(enabled: newValue)
+                    }
 
                 Text("Automatically start the app when you log in")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                if let error = launchAtLoginError {
+                    Label(error, systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
             } header: {
                 Text("Startup")
             }
         }
         .formStyle(.grouped)
         .padding()
+        .onAppear {
+            checkLaunchAtLoginStatus()
+        }
         .onChange(of: showMenuBarIcon) { _, newValue in
             // Post notification to update menu bar visibility
             NotificationCenter.default.post(name: .menuBarVisibilityChanged, object: newValue)
+        }
+    }
+
+    private func checkLaunchAtLoginStatus() {
+        if #available(macOS 13.0, *) {
+            launchAtLogin = SMAppService.mainApp.status == .enabled
+        }
+    }
+
+    private func updateLaunchAtLogin(enabled: Bool) {
+        launchAtLoginError = nil
+
+        if #available(macOS 13.0, *) {
+            do {
+                if enabled {
+                    try SMAppService.mainApp.register()
+                } else {
+                    try SMAppService.mainApp.unregister()
+                }
+            } catch {
+                launchAtLoginError = "Failed to update: \(error.localizedDescription)"
+                // Revert the toggle
+                Task { @MainActor in
+                    launchAtLogin = !enabled
+                }
+            }
+        } else {
+            launchAtLoginError = "Requires macOS 13 or later"
         }
     }
 }

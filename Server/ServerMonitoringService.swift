@@ -19,19 +19,41 @@ class ServerMonitoringService: ObservableObject {
     private var sslCheckCounter: [UUID: Int] = [:]
     private let sslCheckInterval = 10 // Check SSL every 10 regular checks
 
+    // Read monitoring interval from UserDefaults (synced with @AppStorage in SettingsView)
+    private var monitoringInterval: Int {
+        UserDefaults.standard.integer(forKey: "monitoringInterval").clamped(to: 15...300, default: 30)
+    }
+
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
         self.uptimeTrackingService = UptimeTrackingService(modelContext: modelContext)
+
+        // Observe changes to monitoring interval
+        NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleIntervalChange()
+        }
     }
-    
+
+    private func handleIntervalChange() {
+        // Restart monitoring if currently running to apply new interval
+        if isMonitoring {
+            stopMonitoring()
+            startMonitoring()
+        }
+    }
+
     func startMonitoring() {
         guard !isMonitoring else { return }
         isMonitoring = true
-        
+
         monitoringTask = Task {
             while !Task.isCancelled && isMonitoring {
                 await checkAllServers()
-                try? await Task.sleep(for: .seconds(30)) // Check every 30 seconds
+                try? await Task.sleep(for: .seconds(monitoringInterval))
             }
         }
     }
@@ -342,12 +364,21 @@ enum ServerError: LocalizedError {
     case invalidURL
     case connectionFailed
     case timeout
-    
+
     var errorDescription: String? {
         switch self {
         case .invalidURL: return "Invalid server URL"
         case .connectionFailed: return "Connection failed"
         case .timeout: return "Connection timeout"
         }
+    }
+}
+
+// MARK: - Int Extension
+
+private extension Int {
+    func clamped(to range: ClosedRange<Int>, default defaultValue: Int) -> Int {
+        if self == 0 { return defaultValue }
+        return min(max(self, range.lowerBound), range.upperBound)
     }
 }
