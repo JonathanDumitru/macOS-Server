@@ -47,8 +47,13 @@ struct SettingsView: View {
             .tabItem {
                 Label("Data", systemImage: "cylinder")
             }
+
+            WebhookSettingsView()
+            .tabItem {
+                Label("Webhooks", systemImage: "arrow.up.forward.app")
+            }
         }
-        .frame(width: 500, height: 450)
+        .frame(width: 500, height: 550)
     }
 }
 
@@ -423,6 +428,102 @@ struct DataSettingsView: View {
         } catch {
             // Error clearing uptime history
         }
+    }
+}
+
+struct WebhookSettingsView: View {
+    @AppStorage("webhooksEnabled") private var webhooksEnabled = false
+    @AppStorage("slackWebhookURL") private var slackWebhookURL = ""
+    @AppStorage("discordWebhookURL") private var discordWebhookURL = ""
+    @AppStorage("customWebhookURL") private var customWebhookURL = ""
+    @AppStorage("webhookOnOffline") private var webhookOnOffline = true
+    @AppStorage("webhookOnOnline") private var webhookOnOnline = true
+    @AppStorage("webhookOnSSLExpiry") private var webhookOnSSLExpiry = true
+
+    @State private var testSent = false
+    @StateObject private var webhookService = WebhookService.shared
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Enable Webhooks", isOn: $webhooksEnabled)
+
+                Text("Send alerts to Slack, Discord, or custom endpoints")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Webhooks")
+            }
+
+            if webhooksEnabled {
+                Section {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Slack Webhook URL")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        TextField("https://hooks.slack.com/services/...", text: $slackWebhookURL)
+                            .textFieldStyle(.roundedBorder)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Discord Webhook URL")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        TextField("https://discord.com/api/webhooks/...", text: $discordWebhookURL)
+                            .textFieldStyle(.roundedBorder)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Custom Webhook URL")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        TextField("https://your-server.com/webhook", text: $customWebhookURL)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                } header: {
+                    Text("Webhook URLs")
+                } footer: {
+                    Text("Leave empty to disable a specific webhook")
+                        .font(.caption)
+                }
+
+                Section {
+                    Toggle("Server Goes Offline", isOn: $webhookOnOffline)
+                    Toggle("Server Comes Online", isOn: $webhookOnOnline)
+                    Toggle("SSL Certificate Expiry", isOn: $webhookOnSSLExpiry)
+                } header: {
+                    Text("Trigger Events")
+                }
+
+                Section {
+                    Button("Send Test Webhook") {
+                        webhookService.sendTestWebhook()
+                        testSent = true
+                    }
+                    .disabled(!hasAnyWebhookConfigured)
+
+                    if testSent {
+                        if let error = webhookService.lastError {
+                            Label(error, systemImage: "xmark.circle")
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        } else {
+                            Label("Test sent successfully", systemImage: "checkmark.circle")
+                                .font(.caption)
+                                .foregroundStyle(.green)
+                        }
+                    }
+                } header: {
+                    Text("Test")
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .padding()
+    }
+
+    private var hasAnyWebhookConfigured: Bool {
+        !slackWebhookURL.isEmpty || !discordWebhookURL.isEmpty || !customWebhookURL.isEmpty
     }
 }
 

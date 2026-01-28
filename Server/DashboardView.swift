@@ -8,6 +8,7 @@
 import SwiftUI
 import SwiftData
 import Charts
+import UniformTypeIdentifiers
 
 struct DashboardView: View {
     @Environment(\.modelContext) private var modelContext
@@ -17,8 +18,11 @@ struct DashboardView: View {
     @State private var showingAddServer = false
     @State private var showingWelcome = false
     @State private var showingQuickAccessCustomization = false
+    @State private var showingExport = false
+    @State private var showingImport = false
+    @State private var statusFilter: ServerStatus?
     @AppStorage("hasLaunchedBefore") private var hasLaunchedBefore = false
-    
+
     init(modelContext: ModelContext) {
         _monitoringService = StateObject(wrappedValue: ServerMonitoringService(modelContext: modelContext))
     }
@@ -56,6 +60,60 @@ struct DashboardView: View {
                     hasLaunchedBefore = true
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .addServerShortcut)) { _ in
+                showingAddServer = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .refreshAllServers)) { _ in
+                Task {
+                    await monitoringService.checkAllServers()
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .startMonitoring)) { _ in
+                if !monitoringService.isMonitoring {
+                    monitoringService.startMonitoring()
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .stopMonitoring)) { _ in
+                if monitoringService.isMonitoring {
+                    monitoringService.stopMonitoring()
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .showDashboard)) { _ in
+                appModel.selectedSection = .dashboard
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .filterServers)) { notification in
+                if let filter = notification.object as? String {
+                    switch filter {
+                    case "online": statusFilter = .online
+                    case "offline": statusFilter = .offline
+                    case "warning": statusFilter = .warning
+                    default: statusFilter = nil
+                    }
+                } else {
+                    statusFilter = nil
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .exportServers)) { _ in
+                showingExport = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .importServers)) { _ in
+                showingImport = true
+            }
+            .fileExporter(
+                isPresented: $showingExport,
+                document: ServerConfigDocument(servers: servers),
+                contentType: .json,
+                defaultFilename: "servers-backup"
+            ) { result in
+                // Export completed
+            }
+            .fileImporter(
+                isPresented: $showingImport,
+                allowedContentTypes: [.json],
+                allowsMultipleSelection: false
+            ) { result in
+                handleImport(result)
+            }
         } detail: {
             NavigationContentView(
                 selectedSection: appModel.selectedSection,
@@ -64,6 +122,30 @@ struct DashboardView: View {
                 modelContext: modelContext,
                 appModel: appModel
             )
+        }
+    }
+
+    private func handleImport(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+
+            do {
+                let data = try Data(contentsOf: url)
+                let importResult = try ServerImportExportService.shared.importServers(
+                    from: data,
+                    into: modelContext,
+                    existingServers: servers
+                )
+
+                // Could show an alert with import results
+                print("Imported \(importResult.imported) servers, skipped \(importResult.skipped) duplicates")
+            } catch {
+                print("Import failed: \(error)")
+            }
+
+        case .failure(let error):
+            print("File selection failed: \(error)")
         }
     }
 }

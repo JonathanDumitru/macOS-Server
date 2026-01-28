@@ -147,11 +147,19 @@ class NotificationService: ObservableObject {
             return
         }
 
-        // Status changed - check preferences
-        if newStatus == .offline && previous != .offline && notifyOnOffline {
-            sendServerOfflineNotification(server: server)
-        } else if newStatus == .online && previous == .offline && notifyOnOnline {
-            sendServerOnlineNotification(server: server)
+        // Status changed - check preferences and send notifications
+        if newStatus == .offline && previous != .offline {
+            if notifyOnOffline {
+                sendServerOfflineNotification(server: server)
+            }
+            // Also send webhook
+            WebhookService.shared.sendServerOfflineWebhook(server: server)
+        } else if newStatus == .online && previous == .offline {
+            if notifyOnOnline {
+                sendServerOnlineNotification(server: server)
+            }
+            // Also send webhook
+            WebhookService.shared.sendServerOnlineWebhook(server: server)
         } else if newStatus == .warning && previous == .online && notifyOnWarning {
             sendServerWarningNotification(server: server)
         }
@@ -277,6 +285,9 @@ class NotificationService: ObservableObject {
             categoryIdentifier: "SSL_EXPIRY",
             sound: sound
         )
+
+        // Also send webhook
+        WebhookService.shared.sendSSLExpiryWebhook(server: server, daysRemaining: daysRemaining)
     }
 
     // MARK: - Core Notification Sending
