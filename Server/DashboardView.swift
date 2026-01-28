@@ -486,21 +486,59 @@ struct NavigationContentView: View {
 
 struct PlaceholderSectionView: View {
     let section: NavigationSection
-    
+
+    var sectionDescription: String {
+        switch section {
+        case .eventViewer:
+            return "View and manage Windows event logs, including Application, Security, and System logs."
+        case .services:
+            return "Start, stop, and configure Windows services running on the server."
+        case .performanceMonitor:
+            return "Monitor real-time performance counters and resource utilization metrics."
+        case .diskManagement:
+            return "Manage disk partitions, volumes, and storage configurations."
+        case .taskManager:
+            return "View running processes, services, and system resource usage."
+        case .powershell:
+            return "Execute PowerShell commands remotely on the Windows server."
+        default:
+            return "This feature provides additional server management capabilities."
+        }
+    }
+
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 16) {
             Image(systemName: section.icon)
                 .font(.system(size: 48))
-                .foregroundStyle(.secondary)
-            
+                .foregroundStyle(.blue.opacity(0.6))
+
             Text(section.title)
                 .font(.title2.bold())
-            
-            Text("This section is under development")
+
+            Text(sectionDescription)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 400)
+
+            Divider()
+                .frame(width: 200)
+                .padding(.vertical, 8)
+
+            VStack(spacing: 8) {
+                Label("Windows Server Feature", systemImage: "pc")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Text("This feature requires a Windows Server connection with remote management enabled (WinRM).")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 350)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(nsColor: .underPageBackgroundColor))
     }
 }
 

@@ -37,7 +37,6 @@ struct ServerApp: App {
             UptimeRecord.self,
             UptimeDaily.self,
             SSLCertificateInfo.self,
-            NotificationPreference.self,
             Item.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)

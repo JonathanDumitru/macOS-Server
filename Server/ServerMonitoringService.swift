@@ -89,15 +89,19 @@ class ServerMonitoringService: ObservableObject {
             log.server = server
             modelContext.insert(log)
 
-            // Create metric snapshot
+            // Create metric snapshot (simulated - replace with real monitoring in production)
+            let simulatedMetrics = SimulatedMetricsGenerator.shared.generateMetrics(
+                for: server.id,
+                isOnline: status == .online
+            )
             let metric = ServerMetric(
                 timestamp: Date(),
-                cpuUsage: Double.random(in: 10...80), // Mock data - replace with real metrics
-                memoryUsage: Double.random(in: 30...90),
-                diskUsage: Double.random(in: 40...85),
-                networkIn: Double.random(in: 0...100),
-                networkOut: Double.random(in: 0...100),
-                activeConnections: Int.random(in: 0...50)
+                cpuUsage: simulatedMetrics.cpuUsage,
+                memoryUsage: simulatedMetrics.memoryUsage,
+                diskUsage: simulatedMetrics.diskUsage,
+                networkIn: simulatedMetrics.networkIn,
+                networkOut: simulatedMetrics.networkOut,
+                activeConnections: simulatedMetrics.activeConnections
             )
             metric.server = server
             modelContext.insert(metric)
