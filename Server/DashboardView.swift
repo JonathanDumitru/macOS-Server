@@ -810,8 +810,17 @@ struct NavigationContentView: View {
             case .remoteCommands:
                 RemoteCommandsView()
 
-            case .performanceMonitor, .diskManagement, .taskManager, .powershell:
-                PlaceholderSectionView(section: selectedSection)
+            case .performanceMonitor:
+                PerformanceMonitorView()
+
+            case .diskManagement:
+                DiskManagementView()
+
+            case .taskManager:
+                TaskManagerView()
+
+            case .powershell:
+                PowerShellView()
             }
         }
     }
