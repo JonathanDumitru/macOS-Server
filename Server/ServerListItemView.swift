@@ -15,6 +15,13 @@ struct ServerListItemView: View {
 
     var body: some View {
         HStack(spacing: 10) {
+            // Favorite indicator
+            if server.isFavorite {
+                Image(systemName: "star.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.yellow)
+            }
+
             // Server icon with status overlay
             ZStack(alignment: .bottomTrailing) {
                 Image(systemName: server.serverType.iconName)
@@ -22,7 +29,7 @@ struct ServerListItemView: View {
                     .foregroundStyle(.primary)
                     .frame(width: 32, height: 32)
                     .background(Color(server.status.color).opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
-                
+
                 Circle()
                     .fill(Color(server.status.color))
                     .frame(width: 8, height: 8)
@@ -32,7 +39,7 @@ struct ServerListItemView: View {
                     )
                     .offset(x: 2, y: 2)
             }
-            
+
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(server.name)
@@ -41,6 +48,24 @@ struct ServerListItemView: View {
 
                     if server.group != nil {
                         ServerGroupBadge(group: server.group, size: .small)
+                    }
+
+                    // Tags
+                    if !server.tags.isEmpty {
+                        ForEach(server.tags.prefix(2), id: \.self) { tag in
+                            Text(tag)
+                                .font(.system(size: 9, weight: .medium))
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(Color.blue.opacity(0.15))
+                                .foregroundStyle(.blue)
+                                .clipShape(Capsule())
+                        }
+                        if server.tags.count > 2 {
+                            Text("+\(server.tags.count - 2)")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
 

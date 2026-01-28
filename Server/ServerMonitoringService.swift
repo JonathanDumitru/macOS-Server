@@ -343,14 +343,16 @@ class ServerMonitoringService: ObservableObject {
 
         guard let previous = previousStatus else { return }
 
-        // Server went offline - create incident
+        // Server went offline - create incident and play sound
         if newStatus == .offline && previous != .offline {
             IncidentService.shared.createOutageIncident(for: server)
+            SoundAlertService.shared.playAlert(for: .serverOffline)
         }
 
-        // Server recovered - resolve incident
+        // Server recovered - resolve incident and play sound
         if newStatus == .online && previous == .offline {
             IncidentService.shared.resolveIncident(for: server, resolution: "Server recovered automatically")
+            SoundAlertService.shared.playAlert(for: .serverRecovered)
         }
 
         // Server warning status

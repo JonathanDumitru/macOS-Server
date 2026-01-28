@@ -53,8 +53,13 @@ struct SettingsView: View {
             .tabItem {
                 Label("Webhooks", systemImage: "arrow.up.forward.app")
             }
+
+            SoundAlertSettingsView()
+            .tabItem {
+                Label("Sounds", systemImage: "speaker.wave.3")
+            }
         }
-        .frame(width: 500, height: 550)
+        .frame(width: 550, height: 600)
     }
 }
 

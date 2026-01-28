@@ -20,6 +20,8 @@ final class Server {
     var responseTime: Double? // in milliseconds
     var uptime: TimeInterval?
     var notes: String
+    var isFavorite: Bool
+    var tags: [String]
     
     // Relationships
     @Relationship(deleteRule: .cascade, inverse: \ServerMetric.server)
@@ -45,7 +47,9 @@ final class Server {
         lastChecked: Date? = nil,
         responseTime: Double? = nil,
         uptime: TimeInterval? = nil,
-        notes: String = ""
+        notes: String = "",
+        isFavorite: Bool = false,
+        tags: [String] = []
     ) {
         self.id = id
         self.name = name
@@ -57,6 +61,8 @@ final class Server {
         self.responseTime = responseTime
         self.uptime = uptime
         self.notes = notes
+        self.isFavorite = isFavorite
+        self.tags = tags
     }
 }
 

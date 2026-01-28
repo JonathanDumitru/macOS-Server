@@ -40,6 +40,10 @@ struct ServerApp: App {
             Incident.self,
             HealthCheck.self,
             MaintenanceWindow.self,
+            AlertRule.self,
+            ServerDependency.self,
+            CommandTemplate.self,
+            CommandHistory.self,
             Item.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
@@ -68,6 +72,8 @@ struct ServerApp: App {
                     setupIncidentService()
                     setupHealthCheckService()
                     setupMaintenanceService()
+                    setupAlertRulesEngine()
+                    setupDependencyService()
                 }
         }
         .modelContainer(sharedModelContainer)
@@ -94,6 +100,14 @@ struct ServerApp: App {
 
     private func setupMaintenanceService() {
         MaintenanceService.shared.configure(modelContext: sharedModelContainer.mainContext)
+    }
+
+    private func setupAlertRulesEngine() {
+        AlertRulesEngine.shared.configure(with: sharedModelContainer.mainContext)
+    }
+
+    private func setupDependencyService() {
+        DependencyService.shared.configure(with: sharedModelContainer.mainContext)
     }
 
     private func setupMenuBar() {
