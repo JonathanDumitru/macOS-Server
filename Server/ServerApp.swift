@@ -44,7 +44,6 @@ struct ServerApp: App {
             ServerDependency.self,
             CommandTemplate.self,
             CommandHistory.self,
-            Item.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
