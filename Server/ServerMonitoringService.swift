@@ -68,6 +68,9 @@ class ServerMonitoringService: ObservableObject {
             // Check for status change and send notification
             NotificationService.shared.checkServerStatusChange(server: server, previousStatus: previousStatus)
 
+            // Handle incidents based on status change
+            handleIncidentForStatusChange(server: server, newStatus: status, previousStatus: previousStatus)
+
             // Record uptime check
             uptimeTrackingService.recordCheck(
                 server: server,
@@ -111,6 +114,9 @@ class ServerMonitoringService: ObservableObject {
                 await checkSSLCertificateIfNeeded(server)
             }
 
+            // Run custom health checks
+            await runHealthChecks(for: server)
+
             try? modelContext.save()
         } catch {
             server.status = .offline
@@ -118,6 +124,9 @@ class ServerMonitoringService: ObservableObject {
 
             // Check for status change and send notification
             NotificationService.shared.checkServerStatusChange(server: server, previousStatus: previousStatus)
+
+            // Handle incidents based on status change (server went offline)
+            handleIncidentForStatusChange(server: server, newStatus: .offline, previousStatus: previousStatus)
 
             // Record uptime check (failed)
             uptimeTrackingService.recordCheck(
@@ -260,6 +269,11 @@ class ServerMonitoringService: ObservableObject {
 
                 // Send SSL expiry notification
                 NotificationService.shared.sendSSLExpiryNotification(server: server, daysRemaining: days)
+
+                // Create SSL incident if expiring soon
+                if days <= 14 {
+                    IncidentService.shared.createSSLExpiryIncident(for: server, daysRemaining: days)
+                }
             }
         } catch {
             // Log SSL check error
@@ -278,6 +292,49 @@ class ServerMonitoringService: ObservableObject {
         sslCheckCounter[server.id] = 0
         await checkSSLCertificateIfNeeded(server)
         try? modelContext.save()
+    }
+
+    // MARK: - Health Checks
+
+    private func runHealthChecks(for server: Server) async {
+        let results = await HealthCheckService.shared.runAllHealthChecks(for: server)
+
+        // Log any failed health checks
+        for result in results where !result.passed {
+            let log = ServerLog(
+                timestamp: Date(),
+                message: "Health check failed: \(result.message)",
+                level: .warning
+            )
+            log.server = server
+            modelContext.insert(log)
+        }
+    }
+
+    // MARK: - Incident Management
+
+    private func handleIncidentForStatusChange(server: Server, newStatus: ServerStatus, previousStatus: ServerStatus?) {
+        // Skip if server is in maintenance
+        if IncidentService.shared.isInMaintenance(serverId: server.id) {
+            return
+        }
+
+        guard let previous = previousStatus else { return }
+
+        // Server went offline - create incident
+        if newStatus == .offline && previous != .offline {
+            IncidentService.shared.createOutageIncident(for: server)
+        }
+
+        // Server recovered - resolve incident
+        if newStatus == .online && previous == .offline {
+            IncidentService.shared.resolveIncident(for: server, resolution: "Server recovered automatically")
+        }
+
+        // Server warning status
+        if newStatus == .warning && previous == .online {
+            IncidentService.shared.createWarningIncident(for: server, reason: "Server returned warning status")
+        }
     }
 }
 

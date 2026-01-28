@@ -37,6 +37,9 @@ struct ServerApp: App {
             UptimeRecord.self,
             UptimeDaily.self,
             SSLCertificateInfo.self,
+            Incident.self,
+            HealthCheck.self,
+            MaintenanceWindow.self,
             Item.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
@@ -62,6 +65,9 @@ struct ServerApp: App {
                 .onAppear {
                     setupMenuBar()
                     setupMenuBarObserver()
+                    setupIncidentService()
+                    setupHealthCheckService()
+                    setupMaintenanceService()
                 }
         }
         .modelContainer(sharedModelContainer)
@@ -76,6 +82,18 @@ struct ServerApp: App {
                 .modelContainer(sharedModelContainer)
         }
         #endif
+    }
+
+    private func setupIncidentService() {
+        IncidentService.shared.configure(with: sharedModelContainer.mainContext)
+    }
+
+    private func setupHealthCheckService() {
+        HealthCheckService.shared.configure(modelContext: sharedModelContainer.mainContext)
+    }
+
+    private func setupMaintenanceService() {
+        MaintenanceService.shared.configure(modelContext: sharedModelContainer.mainContext)
     }
 
     private func setupMenuBar() {

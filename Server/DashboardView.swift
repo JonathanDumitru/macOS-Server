@@ -154,6 +154,8 @@ struct DashboardView: View {
 
 enum NavigationSection: String, CaseIterable, Identifiable, Codable {
     case dashboard
+    case incidents
+    case maintenance
     case rolesFeatures
     case storage
     case networking
@@ -165,12 +167,14 @@ enum NavigationSection: String, CaseIterable, Identifiable, Codable {
     case diskManagement
     case taskManager
     case powershell
-    
+
     var id: String { rawValue }
-    
+
     var title: String {
         switch self {
         case .dashboard: return "Dashboard"
+        case .incidents: return "Incidents"
+        case .maintenance: return "Maintenance"
         case .rolesFeatures: return "Roles & Features"
         case .storage: return "Storage"
         case .networking: return "Networking"
@@ -184,10 +188,12 @@ enum NavigationSection: String, CaseIterable, Identifiable, Codable {
         case .powershell: return "PowerShell"
         }
     }
-    
+
     var icon: String {
         switch self {
         case .dashboard: return "square.grid.2x2"
+        case .incidents: return "exclamationmark.triangle"
+        case .maintenance: return "calendar.badge.clock"
         case .rolesFeatures: return "cube.box"
         case .storage: return "internaldrive"
         case .networking: return "network"
@@ -201,10 +207,10 @@ enum NavigationSection: String, CaseIterable, Identifiable, Codable {
         case .powershell: return "terminal"
         }
     }
-    
+
     var isPrimary: Bool {
         switch self {
-        case .dashboard, .rolesFeatures, .storage, .networking, .security, .updates:
+        case .dashboard, .incidents, .maintenance, .rolesFeatures, .storage, .networking, .security, .updates:
             return true
         default:
             return false
@@ -538,6 +544,12 @@ struct NavigationContentView: View {
                         }
                 }
                 
+            case .incidents:
+                IncidentTimelineView()
+
+            case .maintenance:
+                MaintenanceView()
+
             case .rolesFeatures:
                 RolesAndFeaturesView(appModel: appModel)
                 

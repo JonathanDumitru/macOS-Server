@@ -15,6 +15,7 @@ struct ServerDetailView: View {
     
     enum DetailTab: String, CaseIterable {
         case overview = "Overview"
+        case health = "Health"
         case uptime = "Uptime"
         case ssl = "SSL"
         case metrics = "Metrics"
@@ -23,6 +24,7 @@ struct ServerDetailView: View {
         var icon: String {
             switch self {
             case .overview: return "info.circle"
+            case .health: return "heart.text.square"
             case .uptime: return "arrow.up.circle"
             case .ssl: return "lock.fill"
             case .metrics: return "chart.xyaxis.line"
@@ -61,6 +63,9 @@ struct ServerDetailView: View {
             TabView(selection: $selectedTab) {
                 ServerOverviewView(server: server)
                     .tag(DetailTab.overview)
+
+                HealthCheckView(server: server)
+                    .tag(DetailTab.health)
 
                 ServerUptimeView(server: server)
                     .tag(DetailTab.uptime)
