@@ -38,7 +38,8 @@ struct StorageView: View {
     }
     
     var averageIOPS: Int {
-        Int.random(in: 15000...25000) // Mock data
+        // Simulated IOPS - in production, query via WMI/CIM for Windows or diskutil for macOS
+        Int.random(in: 15000...25000)
     }
     
     private var volumeBinding: Binding<StorageVolume?> {
@@ -407,6 +408,10 @@ struct VolumeDetailView: View {
     let volume: StorageVolume
     let appModel: AppModel
     @State private var showingDeleteConfirmation = false
+    @State private var isCheckingDisk = false
+    @State private var showDiskCheckComplete = false
+    @State private var showResizeSheet = false
+    @State private var newVolumeSize: Double = 0
     
     var body: some View {
         DetailPageContainer {
@@ -475,20 +480,33 @@ struct VolumeDetailView: View {
             }
             
             VStack(spacing: 8) {
-                Button(action: {}) {
-                    Label("Run Disk Check", systemImage: "checkmark.circle")
+                Button(action: runDiskCheck) {
+                    if isCheckingDisk {
+                        HStack {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Checking...")
+                        }
                         .frame(maxWidth: .infinity)
+                    } else {
+                        Label("Run Disk Check", systemImage: "checkmark.circle")
+                            .frame(maxWidth: .infinity)
+                    }
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
-                
-                Button(action: {}) {
+                .disabled(isCheckingDisk)
+
+                Button(action: {
+                    newVolumeSize = volume.totalSize
+                    showResizeSheet = true
+                }) {
                     Label("Resize Volume", systemImage: "arrow.up.left.and.arrow.down.right")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
-                
+
                 Button(role: .destructive, action: { showingDeleteConfirmation = true }) {
                     Label("Delete Volume", systemImage: "trash")
                         .frame(maxWidth: .infinity)
@@ -504,6 +522,36 @@ struct VolumeDetailView: View {
             }
         } message: {
             Text("Are you sure you want to delete '\(volume.name)'? This action cannot be undone and all data will be lost.")
+        }
+        .alert("Disk Check Complete", isPresented: $showDiskCheckComplete) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("No errors found on volume '\(volume.name)'. The file system is healthy.")
+        }
+        .sheet(isPresented: $showResizeSheet) {
+            VolumeResizeSheet(
+                volumeName: volume.name,
+                currentSize: volume.totalSize,
+                newSize: $newVolumeSize,
+                onResize: { _ in
+                    // In a real app, this would resize the volume
+                    showResizeSheet = false
+                },
+                onCancel: {
+                    showResizeSheet = false
+                }
+            )
+        }
+    }
+
+    private func runDiskCheck() {
+        isCheckingDisk = true
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            await MainActor.run {
+                isCheckingDisk = false
+                showDiskCheckComplete = true
+            }
         }
     }
     
@@ -654,6 +702,83 @@ struct CreateVolumeSheet: View {
         .frame(width: 400)
     }
 }
+
+// MARK: - Volume Resize Sheet
+
+struct VolumeResizeSheet: View {
+    let volumeName: String
+    let currentSize: Double
+    @Binding var newSize: Double
+    let onResize: (Double) -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Resize Volume")
+                .font(.title2.bold())
+
+            Text("Resize '\(volumeName)'")
+                .foregroundStyle(.secondary)
+
+            Form {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Current Size:")
+                        Spacer()
+                        Text(formatSize(currentSize))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    HStack {
+                        Text("New Size:")
+                        Spacer()
+                        Text(formatSize(newSize))
+                            .foregroundStyle(newSize < currentSize ? .orange : .blue)
+                    }
+
+                    Slider(value: $newSize, in: 10...5000, step: 10)
+                }
+            }
+            .formStyle(.grouped)
+
+            if newSize < currentSize {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text("Shrinking a volume may result in data loss if the volume contains more data than the new size.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal)
+            }
+
+            HStack(spacing: 12) {
+                Button("Cancel") {
+                    onCancel()
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Button("Resize") {
+                    onResize(newSize)
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(newSize == currentSize)
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding()
+        .frame(width: 400)
+    }
+
+    private func formatSize(_ size: Double) -> String {
+        if size >= 1000 {
+            return String(format: "%.1f TB", size / 1000)
+        } else {
+            return String(format: "%.0f GB", size)
+        }
+    }
+}
+
 // MARK: - Shared Layout Container
 
 struct DetailPageContainer<Content: View>: View {

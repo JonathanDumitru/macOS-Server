@@ -8,6 +8,7 @@
 import SwiftUI
 import SwiftData
 import Charts
+import UniformTypeIdentifiers
 
 struct DashboardView: View {
     @Environment(\.modelContext) private var modelContext
@@ -17,8 +18,17 @@ struct DashboardView: View {
     @State private var showingAddServer = false
     @State private var showingWelcome = false
     @State private var showingQuickAccessCustomization = false
+    @State private var showingExport = false
+    @State private var showingImport = false
+    @State private var statusFilter: ServerStatus?
     @AppStorage("hasLaunchedBefore") private var hasLaunchedBefore = false
-    
+
+    // Import/Export alerts
+    @State private var showImportAlert = false
+    @State private var importAlertTitle = ""
+    @State private var importAlertMessage = ""
+    @State private var importAlertIsError = false
+
     init(modelContext: ModelContext) {
         _monitoringService = StateObject(wrappedValue: ServerMonitoringService(modelContext: modelContext))
     }
@@ -56,6 +66,65 @@ struct DashboardView: View {
                     hasLaunchedBefore = true
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .addServerShortcut)) { _ in
+                showingAddServer = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .refreshAllServers)) { _ in
+                Task {
+                    await monitoringService.checkAllServers()
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .startMonitoring)) { _ in
+                if !monitoringService.isMonitoring {
+                    monitoringService.startMonitoring()
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .stopMonitoring)) { _ in
+                if monitoringService.isMonitoring {
+                    monitoringService.stopMonitoring()
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .showDashboard)) { _ in
+                appModel.selectedSection = .dashboard
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .filterServers)) { notification in
+                if let filter = notification.object as? String {
+                    switch filter {
+                    case "online": statusFilter = .online
+                    case "offline": statusFilter = .offline
+                    case "warning": statusFilter = .warning
+                    default: statusFilter = nil
+                    }
+                } else {
+                    statusFilter = nil
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .exportServers)) { _ in
+                showingExport = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .importServers)) { _ in
+                showingImport = true
+            }
+            .fileExporter(
+                isPresented: $showingExport,
+                document: ServerConfigDocument(servers: servers),
+                contentType: .json,
+                defaultFilename: "servers-backup"
+            ) { result in
+                // Export completed
+            }
+            .fileImporter(
+                isPresented: $showingImport,
+                allowedContentTypes: [.json],
+                allowsMultipleSelection: false
+            ) { result in
+                handleImport(result)
+            }
+            .alert(importAlertTitle, isPresented: $showImportAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(importAlertMessage)
+            }
         } detail: {
             NavigationContentView(
                 selectedSection: appModel.selectedSection,
@@ -66,12 +135,61 @@ struct DashboardView: View {
             )
         }
     }
+
+    private func handleImport(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+
+            do {
+                let data = try Data(contentsOf: url)
+                let importResult = try ServerImportExportService.shared.importServers(
+                    from: data,
+                    into: modelContext,
+                    existingServers: servers
+                )
+
+                // Show success alert
+                importAlertTitle = "Import Complete"
+                if importResult.imported > 0 && importResult.skipped > 0 {
+                    importAlertMessage = "Successfully imported \(importResult.imported) server(s). Skipped \(importResult.skipped) duplicate(s)."
+                } else if importResult.imported > 0 {
+                    importAlertMessage = "Successfully imported \(importResult.imported) server(s)."
+                } else if importResult.skipped > 0 {
+                    importAlertMessage = "No new servers imported. \(importResult.skipped) server(s) already exist."
+                } else {
+                    importAlertMessage = "No servers found in the file."
+                }
+                importAlertIsError = false
+                showImportAlert = true
+
+            } catch {
+                // Show error alert
+                importAlertTitle = "Import Failed"
+                importAlertMessage = error.localizedDescription
+                importAlertIsError = true
+                showImportAlert = true
+            }
+
+        case .failure(let error):
+            // Show error alert for file selection failure
+            importAlertTitle = "File Selection Failed"
+            importAlertMessage = error.localizedDescription
+            importAlertIsError = true
+            showImportAlert = true
+        }
+    }
 }
 
 // MARK: - Navigation
 
 enum NavigationSection: String, CaseIterable, Identifiable, Codable {
     case dashboard
+    case incidents
+    case maintenance
+    case alertRules
+    case dependencies
+    case comparison
     case rolesFeatures
     case storage
     case networking
@@ -83,12 +201,18 @@ enum NavigationSection: String, CaseIterable, Identifiable, Codable {
     case diskManagement
     case taskManager
     case powershell
-    
+    case remoteCommands
+
     var id: String { rawValue }
-    
+
     var title: String {
         switch self {
         case .dashboard: return "Dashboard"
+        case .incidents: return "Incidents"
+        case .maintenance: return "Maintenance"
+        case .alertRules: return "Alert Rules"
+        case .dependencies: return "Dependencies"
+        case .comparison: return "Comparison"
         case .rolesFeatures: return "Roles & Features"
         case .storage: return "Storage"
         case .networking: return "Networking"
@@ -100,12 +224,18 @@ enum NavigationSection: String, CaseIterable, Identifiable, Codable {
         case .diskManagement: return "Disk Management"
         case .taskManager: return "Task Manager"
         case .powershell: return "PowerShell"
+        case .remoteCommands: return "Remote Commands"
         }
     }
-    
+
     var icon: String {
         switch self {
         case .dashboard: return "square.grid.2x2"
+        case .incidents: return "exclamationmark.triangle"
+        case .maintenance: return "calendar.badge.clock"
+        case .alertRules: return "bell.badge"
+        case .dependencies: return "arrow.triangle.branch"
+        case .comparison: return "chart.bar.xaxis"
         case .rolesFeatures: return "cube.box"
         case .storage: return "internaldrive"
         case .networking: return "network"
@@ -117,12 +247,13 @@ enum NavigationSection: String, CaseIterable, Identifiable, Codable {
         case .diskManagement: return "externaldrive"
         case .taskManager: return "list.bullet.clipboard"
         case .powershell: return "terminal"
+        case .remoteCommands: return "apple.terminal"
         }
     }
-    
+
     var isPrimary: Bool {
         switch self {
-        case .dashboard, .rolesFeatures, .storage, .networking, .security, .updates:
+        case .dashboard, .incidents, .maintenance, .alertRules, .dependencies, .comparison, .remoteCommands, .rolesFeatures, .storage, .networking, .security, .updates:
             return true
         default:
             return false
@@ -355,17 +486,38 @@ struct NavigationContentView: View {
     let monitoringService: ServerMonitoringService
     let modelContext: ModelContext
     @Bindable var appModel: AppModel
-    
+
+    @Query(sort: \ServerGroup.sortOrder) private var groups: [ServerGroup]
     @State private var selectedServer: Server?
     @State private var searchText = ""
-    
+    @State private var selectedGroupFilter: ServerGroup?
+    @State private var selectedServers: Set<Server.ID> = []
+    @State private var isInBulkMode = false
+    @State private var showBulkDeleteConfirm = false
+
     var filteredServers: [Server] {
-        if searchText.isEmpty {
-            return servers
+        var result = servers
+
+        // Filter by group
+        if let group = selectedGroupFilter {
+            result = result.filter { $0.group?.id == group.id }
         }
-        return servers.filter { server in
-            server.name.localizedCaseInsensitiveContains(searchText) ||
-            server.host.localizedCaseInsensitiveContains(searchText)
+
+        // Filter by search text
+        if !searchText.isEmpty {
+            result = result.filter { server in
+                server.name.localizedCaseInsensitiveContains(searchText) ||
+                server.host.localizedCaseInsensitiveContains(searchText) ||
+                server.tags.contains { $0.localizedCaseInsensitiveContains(searchText) }
+            }
+        }
+
+        // Sort: favorites first, then by name
+        return result.sorted { lhs, rhs in
+            if lhs.isFavorite != rhs.isFavorite {
+                return lhs.isFavorite
+            }
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
         }
     }
     
@@ -375,25 +527,237 @@ struct NavigationContentView: View {
             case .dashboard:
                 if selectedServer != nil {
                     NavigationStack {
-                        List(filteredServers, selection: $selectedServer) { server in
-                            NavigationLink(value: server) {
-                                ServerListItemView(server: server)
+                        VStack(spacing: 0) {
+                            // Group Filter Bar
+                            if !groups.isEmpty {
+                                GroupFilterBar(groups: groups, selectedGroup: $selectedGroupFilter)
+                                    .background(Color(nsColor: .windowBackgroundColor))
+                                Divider()
                             }
-                            .contextMenu {
-                                Button("Check Now") {
-                                    Task {
-                                        await monitoringService.checkServer(server)
+
+                            List(filteredServers, selection: isInBulkMode ? nil : $selectedServer) { server in
+                                if isInBulkMode {
+                                    HStack {
+                                        Image(systemName: selectedServers.contains(server.id) ? "checkmark.circle.fill" : "circle")
+                                            .foregroundStyle(selectedServers.contains(server.id) ? .blue : .secondary)
+                                            .font(.system(size: 18))
+                                        ServerListItemView(server: server)
+                                    }
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        if selectedServers.contains(server.id) {
+                                            selectedServers.remove(server.id)
+                                        } else {
+                                            selectedServers.insert(server.id)
+                                        }
+                                    }
+                                } else {
+                                    NavigationLink(value: server) {
+                                        ServerListItemView(server: server)
+                                    }
+                                .contextMenu {
+                                    // Quick Actions Section
+                                    Button {
+                                        Task {
+                                            await monitoringService.checkServer(server)
+                                        }
+                                    } label: {
+                                        Label("Check Now", systemImage: "arrow.clockwise")
+                                    }
+
+                                    Button {
+                                        server.isFavorite.toggle()
+                                    } label: {
+                                        Label(
+                                            server.isFavorite ? "Remove from Favorites" : "Add to Favorites",
+                                            systemImage: server.isFavorite ? "star.slash" : "star"
+                                        )
+                                    }
+
+                                    Divider()
+
+                                    // Copy actions
+                                    Menu("Copy") {
+                                        Button {
+                                            NSPasteboard.general.clearContents()
+                                            NSPasteboard.general.setString(server.host, forType: .string)
+                                        } label: {
+                                            Label("Host", systemImage: "doc.on.doc")
+                                        }
+
+                                        Button {
+                                            NSPasteboard.general.clearContents()
+                                            NSPasteboard.general.setString("\(server.host):\(server.port)", forType: .string)
+                                        } label: {
+                                            Label("Host:Port", systemImage: "doc.on.doc")
+                                        }
+
+                                        if server.serverType == .https || server.serverType == .http {
+                                            Button {
+                                                let url = "\(server.serverType == .https ? "https" : "http")://\(server.host):\(server.port)"
+                                                NSPasteboard.general.clearContents()
+                                                NSPasteboard.general.setString(url, forType: .string)
+                                            } label: {
+                                                Label("URL", systemImage: "link")
+                                            }
+                                        }
+                                    }
+
+                                    // Open in browser (for web servers)
+                                    if server.serverType == .https || server.serverType == .http {
+                                        Button {
+                                            let url = URL(string: "\(server.serverType == .https ? "https" : "http")://\(server.host):\(server.port)")
+                                            if let url = url {
+                                                NSWorkspace.shared.open(url)
+                                            }
+                                        } label: {
+                                            Label("Open in Browser", systemImage: "safari")
+                                        }
+                                    }
+
+                                    Divider()
+
+                                    // Group assignment menu
+                                    Menu("Assign to Group") {
+                                        Button("None") {
+                                            server.group = nil
+                                        }
+
+                                        if !groups.isEmpty {
+                                            Divider()
+                                        }
+
+                                        ForEach(groups) { group in
+                                            Button {
+                                                server.group = group
+                                            } label: {
+                                                HStack {
+                                                    Image(systemName: group.icon)
+                                                    Text(group.name)
+                                                    if server.group?.id == group.id {
+                                                        Image(systemName: "checkmark")
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Tags menu
+                                    Menu("Tags") {
+                                        let commonTags = ["production", "staging", "development", "critical", "backup"]
+                                        ForEach(commonTags, id: \.self) { tag in
+                                            Button {
+                                                if server.tags.contains(tag) {
+                                                    server.tags.removeAll { $0 == tag }
+                                                } else {
+                                                    server.tags.append(tag)
+                                                }
+                                            } label: {
+                                                HStack {
+                                                    Text(tag.capitalized)
+                                                    if server.tags.contains(tag) {
+                                                        Image(systemName: "checkmark")
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Divider()
+
+                                    Button("Delete", role: .destructive) {
+                                        deleteServer(server)
                                     }
                                 }
-                                Divider()
-                                Button("Delete", role: .destructive) {
-                                    deleteServer(server)
                                 }
                             }
                         }
                         .searchable(text: $searchText, prompt: "Search servers")
                         .navigationDestination(for: Server.self) { server in
                             ServerDetailView(server: server)
+                        }
+                        .toolbar {
+                            ToolbarItemGroup(placement: .primaryAction) {
+                                // Bulk mode toggle
+                                Toggle(isOn: $isInBulkMode) {
+                                    Label("Select Multiple", systemImage: "checklist")
+                                }
+                                .toggleStyle(.button)
+
+                                if isInBulkMode && !selectedServers.isEmpty {
+                                    Divider()
+
+                                    // Bulk check
+                                    Button {
+                                        bulkCheckServers()
+                                    } label: {
+                                        Label("Check Selected", systemImage: "arrow.clockwise")
+                                    }
+
+                                    // Bulk favorite
+                                    Menu {
+                                        Button {
+                                            bulkSetFavorite(true)
+                                        } label: {
+                                            Label("Add to Favorites", systemImage: "star")
+                                        }
+                                        Button {
+                                            bulkSetFavorite(false)
+                                        } label: {
+                                            Label("Remove from Favorites", systemImage: "star.slash")
+                                        }
+                                    } label: {
+                                        Label("Favorites", systemImage: "star")
+                                    }
+
+                                    // Bulk group assignment
+                                    Menu {
+                                        Button("Remove from Group") {
+                                            bulkAssignGroup(nil)
+                                        }
+                                        if !groups.isEmpty {
+                                            Divider()
+                                            ForEach(groups) { group in
+                                                Button {
+                                                    bulkAssignGroup(group)
+                                                } label: {
+                                                    Label(group.name, systemImage: group.icon)
+                                                }
+                                            }
+                                        }
+                                    } label: {
+                                        Label("Assign Group", systemImage: "folder")
+                                    }
+
+                                    // Bulk delete
+                                    Button(role: .destructive) {
+                                        showBulkDeleteConfirm = true
+                                    } label: {
+                                        Label("Delete Selected", systemImage: "trash")
+                                    }
+
+                                    Text("\(selectedServers.count) selected")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .confirmationDialog(
+                            "Delete \(selectedServers.count) servers?",
+                            isPresented: $showBulkDeleteConfirm,
+                            titleVisibility: .visible
+                        ) {
+                            Button("Delete", role: .destructive) {
+                                bulkDeleteServers()
+                            }
+                            Button("Cancel", role: .cancel) { }
+                        } message: {
+                            Text("This action cannot be undone.")
+                        }
+                        .onChange(of: isInBulkMode) { _, newValue in
+                            if !newValue {
+                                selectedServers.removeAll()
+                            }
                         }
                     }
                 } else {
@@ -407,6 +771,21 @@ struct NavigationContentView: View {
                         }
                 }
                 
+            case .incidents:
+                IncidentTimelineView()
+
+            case .maintenance:
+                MaintenanceView()
+
+            case .alertRules:
+                AlertRulesView()
+
+            case .dependencies:
+                DependencyMapView()
+
+            case .comparison:
+                ServerComparisonView()
+
             case .rolesFeatures:
                 RolesAndFeaturesView(appModel: appModel)
                 
@@ -421,9 +800,27 @@ struct NavigationContentView: View {
                 
             case .updates:
                 UpdatesView(appModel: appModel)
-                
-            default:
-                PlaceholderSectionView(section: selectedSection)
+
+            case .eventViewer:
+                EventViewerView()
+
+            case .services:
+                ServicesView()
+
+            case .remoteCommands:
+                RemoteCommandsView()
+
+            case .performanceMonitor:
+                PerformanceMonitorView()
+
+            case .diskManagement:
+                DiskManagementView()
+
+            case .taskManager:
+                TaskManagerView()
+
+            case .powershell:
+                PowerShellView()
             }
         }
     }
@@ -433,25 +830,107 @@ struct NavigationContentView: View {
             modelContext.delete(server)
         }
     }
+
+    // MARK: - Bulk Operations
+
+    private func bulkCheckServers() {
+        Task {
+            for serverId in selectedServers {
+                if let server = servers.first(where: { $0.id == serverId }) {
+                    await monitoringService.checkServer(server)
+                }
+            }
+        }
+    }
+
+    private func bulkSetFavorite(_ isFavorite: Bool) {
+        for serverId in selectedServers {
+            if let server = servers.first(where: { $0.id == serverId }) {
+                server.isFavorite = isFavorite
+            }
+        }
+        selectedServers.removeAll()
+        isInBulkMode = false
+    }
+
+    private func bulkAssignGroup(_ group: ServerGroup?) {
+        for serverId in selectedServers {
+            if let server = servers.first(where: { $0.id == serverId }) {
+                server.group = group
+            }
+        }
+        selectedServers.removeAll()
+        isInBulkMode = false
+    }
+
+    private func bulkDeleteServers() {
+        withAnimation {
+            for serverId in selectedServers {
+                if let server = servers.first(where: { $0.id == serverId }) {
+                    modelContext.delete(server)
+                }
+            }
+            selectedServers.removeAll()
+            isInBulkMode = false
+        }
+    }
 }
 
 struct PlaceholderSectionView: View {
     let section: NavigationSection
-    
+
+    var sectionDescription: String {
+        switch section {
+        case .eventViewer:
+            return "View and manage Windows event logs, including Application, Security, and System logs."
+        case .services:
+            return "Start, stop, and configure Windows services running on the server."
+        case .performanceMonitor:
+            return "Monitor real-time performance counters and resource utilization metrics."
+        case .diskManagement:
+            return "Manage disk partitions, volumes, and storage configurations."
+        case .taskManager:
+            return "View running processes, services, and system resource usage."
+        case .powershell:
+            return "Execute PowerShell commands remotely on the Windows server."
+        default:
+            return "This feature provides additional server management capabilities."
+        }
+    }
+
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 16) {
             Image(systemName: section.icon)
                 .font(.system(size: 48))
-                .foregroundStyle(.secondary)
-            
+                .foregroundStyle(.blue.opacity(0.6))
+
             Text(section.title)
                 .font(.title2.bold())
-            
-            Text("This section is under development")
+
+            Text(sectionDescription)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 400)
+
+            Divider()
+                .frame(width: 200)
+                .padding(.vertical, 8)
+
+            VStack(spacing: 8) {
+                Label("Windows Server Feature", systemImage: "pc")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Text("This feature requires a Windows Server connection with remote management enabled (WinRM).")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 350)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(nsColor: .underPageBackgroundColor))
     }
 }
 

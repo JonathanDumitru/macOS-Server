@@ -7,15 +7,43 @@
 
 import SwiftUI
 import SwiftData
+import AppKit
+
+// MARK: - App Delegate for Menu Bar
+
+class AppDelegate: NSObject, NSApplicationDelegate {
+    var menuBarController: MenuBarController?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // Menu bar is setup from the App struct after model container is ready
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        menuBarController?.teardown()
+    }
+}
 
 @main
 struct ServerApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
+
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Server.self,
             ServerMetric.self,
             ServerLog.self,
-            Item.self,
+            ServerGroup.self,
+            UptimeRecord.self,
+            UptimeDaily.self,
+            SSLCertificateInfo.self,
+            Incident.self,
+            HealthCheck.self,
+            MaintenanceWindow.self,
+            AlertRule.self,
+            ServerDependency.self,
+            CommandTemplate.self,
+            CommandHistory.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
@@ -26,17 +54,93 @@ struct ServerApp: App {
         }
     }()
 
+    init() {
+        // Setup notifications on app launch
+        Task {
+            await NotificationService.shared.requestAuthorization()
+            NotificationService.shared.setupNotificationCategories()
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             DashboardView(modelContext: sharedModelContainer.mainContext)
+                .onAppear {
+                    setupMenuBar()
+                    setupMenuBarObserver()
+                    setupIncidentService()
+                    setupHealthCheckService()
+                    setupMaintenanceService()
+                    setupAlertRulesEngine()
+                    setupDependencyService()
+                }
         }
         .modelContainer(sharedModelContainer)
         .defaultSize(width: 1200, height: 800)
-        
+        .commands {
+            ServerCommands()
+        }
+
         #if os(macOS)
         Settings {
             SettingsView()
+                .modelContainer(sharedModelContainer)
         }
         #endif
+    }
+
+    private func setupIncidentService() {
+        IncidentService.shared.configure(with: sharedModelContainer.mainContext)
+    }
+
+    private func setupHealthCheckService() {
+        HealthCheckService.shared.configure(modelContext: sharedModelContainer.mainContext)
+    }
+
+    private func setupMaintenanceService() {
+        MaintenanceService.shared.configure(modelContext: sharedModelContainer.mainContext)
+    }
+
+    private func setupAlertRulesEngine() {
+        AlertRulesEngine.shared.configure(with: sharedModelContainer.mainContext)
+    }
+
+    private func setupDependencyService() {
+        DependencyService.shared.configure(with: sharedModelContainer.mainContext)
+    }
+
+    private func setupMenuBar() {
+        Task { @MainActor in
+            if showMenuBarIcon {
+                if appDelegate.menuBarController == nil {
+                    appDelegate.menuBarController = MenuBarController(modelContainer: sharedModelContainer)
+                    appDelegate.menuBarController?.setup()
+                }
+            } else {
+                appDelegate.menuBarController?.teardown()
+                appDelegate.menuBarController = nil
+            }
+        }
+    }
+
+    private func setupMenuBarObserver() {
+        NotificationCenter.default.addObserver(
+            forName: .menuBarVisibilityChanged,
+            object: nil,
+            queue: .main
+        ) { [self] notification in
+            guard let shouldShow = notification.object as? Bool else { return }
+            Task { @MainActor in
+                if shouldShow {
+                    if appDelegate.menuBarController == nil {
+                        appDelegate.menuBarController = MenuBarController(modelContainer: sharedModelContainer)
+                        appDelegate.menuBarController?.setup()
+                    }
+                } else {
+                    appDelegate.menuBarController?.teardown()
+                    appDelegate.menuBarController = nil
+                }
+            }
+        }
     }
 }

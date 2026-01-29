@@ -14,6 +14,9 @@ struct SecurityView: View {
     @State private var filterStatus: SecurityAlert.AlertStatus?
     @State private var searchText = ""
     @State private var firewallEnabled = true
+    @State private var isScanning = false
+    @State private var showScanCompleteAlert = false
+    @State private var lastScanTime: Date?
     
     var filteredAlerts: [SecurityAlert] {
         var filtered = appModel.securityAlerts
@@ -49,7 +52,12 @@ struct SecurityView: View {
     }
     
     var lastScanDate: String {
-        "2 hours ago"
+        if let time = lastScanTime {
+            let formatter = RelativeDateTimeFormatter()
+            formatter.unitsStyle = .full
+            return formatter.localizedString(for: time, relativeTo: Date())
+        }
+        return "Never"
     }
     
     var body: some View {
@@ -85,9 +93,20 @@ struct SecurityView: View {
             .navigationTitle("Security")
             .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 300)
             .toolbar {
-                Button(action: {}) {
-                    Label("Run Scan", systemImage: "magnifyingglass")
+                Button(action: runSecurityScan) {
+                    if isScanning {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Label("Run Scan", systemImage: "magnifyingglass")
+                    }
                 }
+                .disabled(isScanning)
+            }
+            .alert("Security Scan Complete", isPresented: $showScanCompleteAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("No new security issues were detected. System is secure.")
             }
         } detail: {
             Group {
@@ -105,6 +124,20 @@ struct SecurityView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+    }
+
+    private func runSecurityScan() {
+        isScanning = true
+
+        // Simulate a security scan
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            await MainActor.run {
+                lastScanTime = Date()
+                isScanning = false
+                showScanCompleteAlert = true
+            }
         }
     }
 }

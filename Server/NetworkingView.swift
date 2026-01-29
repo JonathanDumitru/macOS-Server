@@ -17,6 +17,7 @@ struct NetworkingView: View {
     }
     
     var averageLatency: String {
+        // Simulated latency - in production, measure via ICMP ping or TCP connection timing
         "\(Int.random(in: 1...5)) ms"
     }
     
@@ -375,6 +376,9 @@ struct NetworkAdapterDetailView: View {
     @State private var dnsServers: String
     @State private var showingDiagnostics = false
     @State private var diagnosticsLog: [String] = []
+    @State private var isResettingAdapter = false
+    @State private var showResetConfirmation = false
+    @State private var showResetComplete = false
     
     init(adapter: NetworkAdapter, appModel: AppModel) {
         self.adapter = adapter
@@ -478,13 +482,23 @@ struct NetworkAdapterDetailView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
-                    
-                    Button(action: {}) {
-                        Label("Reset Adapter", systemImage: "arrow.clockwise")
+
+                    Button(action: { showResetConfirmation = true }) {
+                        if isResettingAdapter {
+                            HStack {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Resetting...")
+                            }
                             .frame(maxWidth: .infinity)
+                        } else {
+                            Label("Reset Adapter", systemImage: "arrow.clockwise")
+                                .frame(maxWidth: .infinity)
+                        }
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.large)
+                    .disabled(isResettingAdapter)
                 }
                 .padding(.horizontal, 20)
                 
@@ -514,6 +528,51 @@ struct NetworkAdapterDetailView: View {
             .padding(.bottom, 20)
         }
         .background(Color(nsColor: .controlBackgroundColor))
+        .alert("Reset Network Adapter?", isPresented: $showResetConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Reset", role: .destructive) {
+                resetAdapter()
+            }
+        } message: {
+            Text("This will temporarily disconnect '\(adapter.name)' and reset its configuration. Active connections will be interrupted.")
+        }
+        .alert("Adapter Reset Complete", isPresented: $showResetComplete) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("'\(adapter.name)' has been reset successfully.")
+        }
+    }
+
+    private func resetAdapter() {
+        isResettingAdapter = true
+        diagnosticsLog.append("[\(formattedTime())] Resetting adapter '\(adapter.name)'...")
+
+        Task {
+            try? await Task.sleep(for: .seconds(1.5))
+            await MainActor.run {
+                diagnosticsLog.append("[\(formattedTime())] Disabling adapter...")
+            }
+            try? await Task.sleep(for: .seconds(1))
+            await MainActor.run {
+                diagnosticsLog.append("[\(formattedTime())] Clearing configuration cache...")
+            }
+            try? await Task.sleep(for: .seconds(0.5))
+            await MainActor.run {
+                diagnosticsLog.append("[\(formattedTime())] Re-enabling adapter...")
+            }
+            try? await Task.sleep(for: .seconds(1))
+            await MainActor.run {
+                diagnosticsLog.append("[\(formattedTime())] Adapter reset complete.")
+                isResettingAdapter = false
+                showResetComplete = true
+            }
+        }
+    }
+
+    private func formattedTime() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter.string(from: Date())
     }
     
     private func formatRate(_ rate: Double) -> String {

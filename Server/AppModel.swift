@@ -102,31 +102,138 @@ class AppModel {
     }
     
     // MARK: - Updates Actions
-    
+
+    @ObservationIgnored private var downloadTasks: [String: Task<Void, Never>] = [:]
+    @ObservationIgnored private var installTasks: [String: Task<Void, Never>] = [:]
+
     func checkForUpdates() {
-        // Simulate finding new updates
-        let newUpdate = SystemUpdate(
-            id: "KB\(Int.random(in: 5000000...5999999))",
-            title: "Security Update \(Date().formatted(.dateTime.month().day()))",
-            description: "This update includes security improvements and bug fixes.",
-            size: Double.random(in: 50...500),
-            requiresReboot: Bool.random(),
-            status: .available,
-            releaseDate: Date()
-        )
-        updates.insert(newUpdate, at: 0)
-    }
-    
-    func downloadUpdate(_ update: SystemUpdate) {
-        if let index = updates.firstIndex(where: { $0.id == update.id }) {
-            updates[index].status = .downloaded
+        // Simulate checking for updates with a delay
+        Task { @MainActor in
+            // Generate 0-3 new updates
+            let updateCount = Int.random(in: 0...3)
+
+            if updateCount == 0 {
+                // No new updates found
+                return
+            }
+
+            let updateTypes = [
+                ("Security Update", "This update addresses security vulnerabilities and includes critical patches.", true),
+                ("Cumulative Update", "Monthly rollup of quality improvements and bug fixes.", true),
+                ("Feature Update", "New features and enhancements for the operating system.", true),
+                ("Driver Update", "Updated device drivers for improved compatibility.", false),
+                ("Definition Update", "Latest virus and malware definitions.", false),
+                (".NET Framework Update", "Security and reliability improvements for .NET Framework.", true),
+                ("Servicing Stack Update", "Improvements to the servicing stack reliability.", false)
+            ]
+
+            for _ in 0..<updateCount {
+                let typeInfo = updateTypes.randomElement()!
+                let kbNumber = Int.random(in: 5000000...5999999)
+                let monthYear = Date().formatted(.dateTime.year().month())
+
+                // Avoid duplicate KB numbers
+                let kbId = "KB\(kbNumber)"
+                guard !updates.contains(where: { $0.id == kbId }) else { continue }
+
+                let newUpdate = SystemUpdate(
+                    id: kbId,
+                    title: "\(monthYear) \(typeInfo.0)",
+                    description: typeInfo.1,
+                    size: Double.random(in: 15...600),
+                    requiresReboot: typeInfo.2,
+                    status: .available,
+                    releaseDate: Date().addingTimeInterval(-Double.random(in: 0...86400 * 7))
+                )
+                updates.insert(newUpdate, at: 0)
+            }
         }
     }
-    
-    func installUpdate(_ update: SystemUpdate) {
+
+    func downloadUpdate(_ update: SystemUpdate) {
+        guard let index = updates.firstIndex(where: { $0.id == update.id }) else { return }
+        guard updates[index].status == .available else { return }
+
+        updates[index].status = .downloading
+        updates[index].downloadProgress = 0
+
+        // Simulate download progress
+        let updateId = update.id
+        downloadTasks[updateId] = Task { @MainActor in
+            let totalSteps = 20
+            for step in 1...totalSteps {
+                try? await Task.sleep(for: .milliseconds(Int.random(in: 100...300)))
+
+                if Task.isCancelled { return }
+
+                if let idx = updates.firstIndex(where: { $0.id == updateId }) {
+                    updates[idx].downloadProgress = Double(step) / Double(totalSteps)
+                }
+            }
+
+            // Download complete
+            if let idx = updates.firstIndex(where: { $0.id == updateId }) {
+                updates[idx].status = .downloaded
+                updates[idx].downloadProgress = 1.0
+            }
+
+            downloadTasks.removeValue(forKey: updateId)
+        }
+    }
+
+    func cancelDownload(_ update: SystemUpdate) {
+        downloadTasks[update.id]?.cancel()
+        downloadTasks.removeValue(forKey: update.id)
+
         if let index = updates.firstIndex(where: { $0.id == update.id }) {
-            updates[index].status = .installed
-            updates[index].installDate = Date()
+            updates[index].status = .available
+            updates[index].downloadProgress = 0
+        }
+    }
+
+    func installUpdate(_ update: SystemUpdate) {
+        guard let index = updates.firstIndex(where: { $0.id == update.id }) else { return }
+        guard updates[index].status == .downloaded else { return }
+
+        updates[index].status = .installing
+        updates[index].installProgress = 0
+
+        // Simulate installation progress
+        let updateId = update.id
+        installTasks[updateId] = Task { @MainActor in
+            let totalSteps = 15
+
+            for step in 1...totalSteps {
+                try? await Task.sleep(for: .milliseconds(Int.random(in: 200...500)))
+
+                if Task.isCancelled { return }
+
+                if let idx = updates.firstIndex(where: { $0.id == updateId }) {
+                    updates[idx].installProgress = Double(step) / Double(totalSteps)
+                }
+            }
+
+            // Installation complete (with small chance of failure for realism)
+            if let idx = updates.firstIndex(where: { $0.id == updateId }) {
+                if Double.random(in: 0...1) < 0.95 {
+                    updates[idx].status = .installed
+                    updates[idx].installDate = Date()
+                    updates[idx].installProgress = 1.0
+                } else {
+                    updates[idx].status = .failed
+                    updates[idx].installProgress = 0
+                }
+            }
+
+            installTasks.removeValue(forKey: updateId)
+        }
+    }
+
+    func retryUpdate(_ update: SystemUpdate) {
+        if let index = updates.firstIndex(where: { $0.id == update.id }) {
+            updates[index].status = .available
+            updates[index].downloadProgress = 0
+            updates[index].installProgress = 0
         }
     }
 }
@@ -339,7 +446,16 @@ struct SystemUpdate: Identifiable, Hashable {
     var status: UpdateStatus
     let releaseDate: Date
     var installDate: Date?
-    
+    var downloadProgress: Double = 0
+    var installProgress: Double = 0
+
+    var formattedSize: String {
+        if size >= 1000 {
+            return String(format: "%.1f GB", size / 1000)
+        }
+        return String(format: "%.1f MB", size)
+    }
+
     enum UpdateStatus: String, CaseIterable {
         case available = "Available"
         case downloading = "Downloading"
@@ -347,6 +463,16 @@ struct SystemUpdate: Identifiable, Hashable {
         case installing = "Installing"
         case installed = "Installed"
         case failed = "Failed"
+
+        var color: Color {
+            switch self {
+            case .available: return .blue
+            case .downloading, .installing: return .orange
+            case .downloaded: return .cyan
+            case .installed: return .green
+            case .failed: return .red
+            }
+        }
     }
     
     static let demoData: [SystemUpdate] = [

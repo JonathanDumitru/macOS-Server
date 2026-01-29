@@ -15,15 +15,29 @@ struct ServerDetailView: View {
     
     enum DetailTab: String, CaseIterable {
         case overview = "Overview"
+        case health = "Health"
+        case uptime = "Uptime"
+        case ssl = "SSL"
         case metrics = "Metrics"
         case logs = "Logs"
-        
+
         var icon: String {
             switch self {
             case .overview: return "info.circle"
+            case .health: return "heart.text.square"
+            case .uptime: return "arrow.up.circle"
+            case .ssl: return "lock.fill"
             case .metrics: return "chart.xyaxis.line"
             case .logs: return "list.bullet.rectangle"
             }
+        }
+    }
+
+    var availableTabs: [DetailTab] {
+        if server.serverType == .https {
+            return DetailTab.allCases
+        } else {
+            return DetailTab.allCases.filter { $0 != .ssl }
         }
     }
     
@@ -37,22 +51,33 @@ struct ServerDetailView: View {
             
             // Tab Picker
             Picker("View", selection: $selectedTab) {
-                ForEach(DetailTab.allCases, id: \.self) { tab in
+                ForEach(availableTabs, id: \.self) { tab in
                     Label(tab.rawValue, systemImage: tab.icon)
                         .tag(tab)
                 }
             }
             .pickerStyle(.segmented)
             .padding()
-            
+
             // Content
             TabView(selection: $selectedTab) {
                 ServerOverviewView(server: server)
                     .tag(DetailTab.overview)
-                
+
+                HealthCheckView(server: server)
+                    .tag(DetailTab.health)
+
+                ServerUptimeView(server: server)
+                    .tag(DetailTab.uptime)
+
+                if server.serverType == .https {
+                    SSLCertificateView(server: server)
+                        .tag(DetailTab.ssl)
+                }
+
                 ServerMetricsView(server: server)
                     .tag(DetailTab.metrics)
-                
+
                 ServerLogsView(server: server)
                     .tag(DetailTab.logs)
             }
@@ -402,32 +427,113 @@ struct ServerLogsView: View {
 
 struct LogItemView: View {
     let log: ServerLog
-    
+
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: log.level.iconName)
                 .foregroundStyle(Color(log.level.color))
                 .font(.system(size: 14, weight: .semibold))
                 .frame(width: 20)
-            
+
             VStack(alignment: .leading, spacing: 3) {
                 HStack {
                     Text(log.level.rawValue.uppercased())
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(Color(log.level.color))
-                    
+
                     Spacer()
-                    
+
                     Text(log.timestamp, style: .time)
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                 }
-                
+
                 Text(log.message)
                     .font(.system(size: 12))
                     .foregroundStyle(.primary)
             }
         }
         .padding(.vertical, 6)
+    }
+}
+
+// MARK: - Server Uptime View
+
+struct ServerUptimeView: View {
+    let server: Server
+    @Environment(\.modelContext) private var modelContext
+    @State private var selectedPeriod: UptimePeriod = .week7d
+    @State private var dailyData: [UptimeDaily] = []
+    @State private var incidents: [DowntimeIncident] = []
+    @State private var uptimePercentage: Double = 0
+    @State private var averageResponseTime: Double?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                // Period picker
+                HStack {
+                    Text("Time Period")
+                        .font(.system(size: 14, weight: .semibold))
+                    Spacer()
+                    UptimePeriodPicker(selectedPeriod: $selectedPeriod)
+                }
+
+                // Summary card
+                UptimeSummaryCard(
+                    uptime: uptimePercentage,
+                    period: selectedPeriod,
+                    averageResponseTime: averageResponseTime,
+                    incidentCount: incidents.count
+                )
+
+                // Uptime Chart
+                GroupBox("Uptime History") {
+                    UptimeTimelineChart(dailyData: dailyData, height: 180)
+                        .padding(8)
+                }
+
+                // Response Time Chart
+                GroupBox("Response Time Trend") {
+                    ResponseTimeChart(dailyData: dailyData, height: 140)
+                        .padding(8)
+                }
+
+                // Downtime Incidents
+                GroupBox("Downtime Incidents") {
+                    DowntimeIncidentsList(incidents: incidents)
+                        .padding(8)
+                }
+
+                // SLA Status
+                GroupBox("SLA Status") {
+                    VStack(spacing: 8) {
+                        ForEach(SLATarget.all, id: \.percentage) { target in
+                            SLAStatusView(
+                                currentUptime: uptimePercentage,
+                                target: target,
+                                period: selectedPeriod
+                            )
+                        }
+                    }
+                    .padding(8)
+                }
+            }
+            .padding()
+        }
+        .onAppear {
+            loadData()
+        }
+        .onChange(of: selectedPeriod) { _, _ in
+            loadData()
+        }
+    }
+
+    private func loadData() {
+        let service = UptimeTrackingService(modelContext: modelContext)
+        dailyData = service.getDailyData(for: server, period: selectedPeriod)
+        incidents = service.getDowntimeIncidents(for: server, period: selectedPeriod)
+        uptimePercentage = service.calculateUptime(for: server, period: selectedPeriod)
+        averageResponseTime = service.calculateAverageResponseTime(for: server, period: selectedPeriod)
     }
 }

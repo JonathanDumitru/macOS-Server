@@ -20,13 +20,22 @@ final class Server {
     var responseTime: Double? // in milliseconds
     var uptime: TimeInterval?
     var notes: String
+    var isFavorite: Bool
+    var tags: [String]
     
     // Relationships
     @Relationship(deleteRule: .cascade, inverse: \ServerMetric.server)
     var metrics: [ServerMetric] = []
-    
+
     @Relationship(deleteRule: .cascade, inverse: \ServerLog.server)
     var logs: [ServerLog] = []
+
+    // Group relationship (optional - server may not belong to a group)
+    var group: ServerGroup?
+
+    // SSL Certificate (for HTTPS servers)
+    @Relationship(deleteRule: .cascade)
+    var sslCertificate: SSLCertificateInfo?
     
     init(
         id: UUID = UUID(),
@@ -38,7 +47,9 @@ final class Server {
         lastChecked: Date? = nil,
         responseTime: Double? = nil,
         uptime: TimeInterval? = nil,
-        notes: String = ""
+        notes: String = "",
+        isFavorite: Bool = false,
+        tags: [String] = []
     ) {
         self.id = id
         self.name = name
@@ -50,6 +61,8 @@ final class Server {
         self.responseTime = responseTime
         self.uptime = uptime
         self.notes = notes
+        self.isFavorite = isFavorite
+        self.tags = tags
     }
 }
 
