@@ -12,23 +12,70 @@ import Charts
 struct DashboardView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var servers: [Server]
+    @Query(sort: \ServerGroup.sortOrder) private var groups: [ServerGroup]
     @StateObject private var monitoringService: ServerMonitoringService
     @State private var appModel = AppModel()
     @State private var showingAddServer = false
     @State private var showingWelcome = false
     @State private var showingQuickAccessCustomization = false
+    @State private var showingGroupManagement = false
+    @State private var selectedGroupFilter: ServerGroup?
+    @State private var selectedTagFilter: String?
+    @State private var searchText = ""
+    @State private var isInBulkMode = false
+    @State private var selectedServerIDs: Set<UUID> = []
+    @State private var showingExportOptions = false
+    @State private var showingImportView = false
+    @State private var showingBulkDeleteConfirm = false
+    @State private var showingBulkMoveToGroup = false
     @AppStorage("hasLaunchedBefore") private var hasLaunchedBefore = false
-    
+
     init(modelContext: ModelContext) {
         _monitoringService = StateObject(wrappedValue: ServerMonitoringService(modelContext: modelContext))
+    }
+
+    var filteredServers: [Server] {
+        var result = servers
+
+        // Filter by search text
+        if !searchText.isEmpty {
+            result = result.filter { server in
+                server.name.localizedCaseInsensitiveContains(searchText) ||
+                server.host.localizedCaseInsensitiveContains(searchText) ||
+                server.tagNames.contains { $0.localizedCaseInsensitiveContains(searchText) } ||
+                server.group?.name.localizedCaseInsensitiveContains(searchText) == true
+            }
+        }
+
+        // Filter by group
+        if let group = selectedGroupFilter {
+            result = result.filter { $0.group?.id == group.id }
+        }
+
+        // Filter by tag
+        if let tag = selectedTagFilter {
+            result = result.filter { $0.tagNames.contains(tag) }
+        }
+
+        return result
+    }
+
+    var selectedServers: [Server] {
+        servers.filter { selectedServerIDs.contains($0.id) }
     }
     
     var body: some View {
         NavigationSplitView {
             SidebarView(
                 selectedSection: $appModel.selectedSection,
-                servers: servers,
+                servers: filteredServers,
+                groups: groups,
+                selectedGroupFilter: $selectedGroupFilter,
+                selectedTagFilter: $selectedTagFilter,
+                searchText: $searchText,
                 isMonitoring: monitoringService.isMonitoring,
+                isInBulkMode: $isInBulkMode,
+                selectedServerIDs: $selectedServerIDs,
                 quickAccessItems: appModel.quickAccessItems.filter { $0.isPinned }.sorted { $0.order < $1.order },
                 onToggleMonitoring: {
                     if monitoringService.isMonitoring {
@@ -38,9 +85,13 @@ struct DashboardView: View {
                     }
                 },
                 onAddServer: { showingAddServer = true },
-                onCustomizeQuickAccess: { showingQuickAccessCustomization = true }
+                onCustomizeQuickAccess: { showingQuickAccessCustomization = true },
+                onManageGroups: { showingGroupManagement = true },
+                onExport: { showingExportOptions = true },
+                onBulkDelete: { showingBulkDeleteConfirm = true },
+                onBulkMoveToGroup: { showingBulkMoveToGroup = true }
             )
-            .navigationSplitViewColumnWidth(min: 240, ideal: 260, max: 280)
+            .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 320)
             .sheet(isPresented: $showingAddServer) {
                 AddServerView()
             }
@@ -50,21 +101,85 @@ struct DashboardView: View {
             .sheet(isPresented: $showingQuickAccessCustomization) {
                 QuickAccessCustomizationView(appModel: appModel)
             }
+            .sheet(isPresented: $showingGroupManagement) {
+                GroupManagementView()
+            }
+            .sheet(isPresented: $showingExportOptions) {
+                ExportOptionsView(servers: isInBulkMode ? selectedServers : Array(servers))
+            }
+            .sheet(isPresented: $showingImportView) {
+                ImportView()
+            }
+            .sheet(isPresented: $showingBulkMoveToGroup) {
+                BulkMoveToGroupView(
+                    servers: selectedServers,
+                    groups: groups,
+                    onComplete: {
+                        selectedServerIDs.removeAll()
+                        isInBulkMode = false
+                    }
+                )
+            }
+            .alert("Delete \(selectedServerIDs.count) Servers?", isPresented: $showingBulkDeleteConfirm) {
+                Button("Cancel", role: .cancel) { }
+                Button("Delete", role: .destructive) {
+                    bulkDeleteServers()
+                }
+            } message: {
+                Text("This action cannot be undone.")
+            }
             .onAppear {
                 if !hasLaunchedBefore && servers.isEmpty {
                     showingWelcome = true
                     hasLaunchedBefore = true
                 }
             }
+            // Keyboard shortcut handlers
+            .onReceive(NotificationCenter.default.publisher(for: .addServer)) { _ in
+                showingAddServer = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .exportServers)) { _ in
+                showingExportOptions = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .importServers)) { _ in
+                showingImportView = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .toggleMonitoring)) { _ in
+                if monitoringService.isMonitoring {
+                    monitoringService.stopMonitoring()
+                } else {
+                    monitoringService.startMonitoring()
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .refreshAll)) { _ in
+                Task {
+                    for server in servers {
+                        await monitoringService.checkServer(server)
+                    }
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .navigateToSection)) { notification in
+                if let section = notification.object as? NavigationSection {
+                    appModel.selectedSection = section
+                }
+            }
         } detail: {
             NavigationContentView(
                 selectedSection: appModel.selectedSection,
-                servers: servers,
+                servers: filteredServers,
                 monitoringService: monitoringService,
                 modelContext: modelContext,
                 appModel: appModel
             )
         }
+    }
+
+    private func bulkDeleteServers() {
+        for server in selectedServers {
+            modelContext.delete(server)
+        }
+        selectedServerIDs.removeAll()
+        isInBulkMode = false
     }
 }
 
@@ -135,24 +250,39 @@ enum NavigationSection: String, CaseIterable, Identifiable, Codable {
 struct SidebarView: View {
     @Binding var selectedSection: NavigationSection
     let servers: [Server]
+    let groups: [ServerGroup]
+    @Binding var selectedGroupFilter: ServerGroup?
+    @Binding var selectedTagFilter: String?
+    @Binding var searchText: String
     let isMonitoring: Bool
+    @Binding var isInBulkMode: Bool
+    @Binding var selectedServerIDs: Set<UUID>
     let quickAccessItems: [QuickAccessItem]
     let onToggleMonitoring: () -> Void
     let onAddServer: () -> Void
     let onCustomizeQuickAccess: () -> Void
-    
+    let onManageGroups: () -> Void
+    let onExport: () -> Void
+    let onBulkDelete: () -> Void
+    let onBulkMoveToGroup: () -> Void
+
     var onlineCount: Int {
         servers.filter { $0.status == .online }.count
     }
-    
+
     var offlineCount: Int {
         servers.filter { $0.status == .offline }.count
     }
-    
+
     var warningCount: Int {
         servers.filter { $0.status == .warning }.count
     }
-    
+
+    // Get unique tags from all servers
+    var allTags: [String] {
+        Array(Set(servers.flatMap { $0.tagNames })).sorted()
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // App Identity Block
@@ -161,12 +291,12 @@ struct SidebarView: View {
                     Image(systemName: "server.rack")
                         .font(.system(size: 26, weight: .semibold))
                         .foregroundStyle(.blue)
-                    
+
                     VStack(alignment: .leading, spacing: 1) {
                         Text("SERVER-2025")
                             .font(.system(size: 16, weight: .bold, design: .default))
                             .foregroundStyle(.primary)
-                        
+
                         Text("Datacenter Edition")
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(.secondary)
@@ -177,9 +307,114 @@ struct SidebarView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 16)
             .background(Color(nsColor: .windowBackgroundColor))
-            
+
             Divider()
-            
+
+            // Search Bar
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+
+                TextField("Search servers...", text: $searchText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color(nsColor: .controlBackgroundColor))
+            .cornerRadius(6)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+
+            // Bulk Mode Toggle & Actions
+            if !servers.isEmpty {
+                HStack(spacing: 6) {
+                    Button {
+                        isInBulkMode.toggle()
+                        if !isInBulkMode {
+                            selectedServerIDs.removeAll()
+                        }
+                    } label: {
+                        Label(isInBulkMode ? "Done" : "Select", systemImage: isInBulkMode ? "checkmark" : "checkmark.circle")
+                            .font(.system(size: 10, weight: .medium))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+
+                    if isInBulkMode {
+                        Button {
+                            if selectedServerIDs.count == servers.count {
+                                selectedServerIDs.removeAll()
+                            } else {
+                                selectedServerIDs = Set(servers.map { $0.id })
+                            }
+                        } label: {
+                            Text(selectedServerIDs.count == servers.count ? "None" : "All")
+                                .font(.system(size: 10, weight: .medium))
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+
+                        if !selectedServerIDs.isEmpty {
+                            Menu {
+                                Button {
+                                    onBulkMoveToGroup()
+                                } label: {
+                                    Label("Move to Group", systemImage: "folder")
+                                }
+
+                                Button {
+                                    onExport()
+                                } label: {
+                                    Label("Export Selected", systemImage: "square.and.arrow.up")
+                                }
+
+                                Divider()
+
+                                Button(role: .destructive) {
+                                    onBulkDelete()
+                                } label: {
+                                    Label("Delete Selected", systemImage: "trash")
+                                }
+                            } label: {
+                                Label("\(selectedServerIDs.count)", systemImage: "ellipsis.circle")
+                                    .font(.system(size: 10, weight: .medium))
+                            }
+                            .menuStyle(.borderlessButton)
+                            .fixedSize()
+                        }
+                    } else {
+                        Spacer()
+
+                        Button {
+                            onExport()
+                        } label: {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 10))
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                        .help("Export Servers")
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.bottom, 6)
+            }
+
+            Divider()
+
             // Navigation Content
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
@@ -191,16 +426,96 @@ struct SidebarView: View {
                             action: { selectedSection = section }
                         )
                     }
-                    
+
+                    // Server Groups Section
+                    if !groups.isEmpty {
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack {
+                                Text("GROUPS")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+
+                                Spacer()
+
+                                Button(action: onManageGroups) {
+                                    Image(systemName: "ellipsis.circle")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Manage Groups")
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.top, 16)
+                            .padding(.bottom, 4)
+
+                            // All Servers option
+                            GroupFilterItem(
+                                name: "All Servers",
+                                icon: "square.grid.2x2",
+                                color: .blue,
+                                count: servers.count,
+                                isSelected: selectedGroupFilter == nil && selectedTagFilter == nil
+                            ) {
+                                selectedGroupFilter = nil
+                                selectedTagFilter = nil
+                            }
+
+                            // Group filters
+                            ForEach(groups) { group in
+                                GroupFilterItem(
+                                    name: group.name,
+                                    icon: group.iconName,
+                                    color: group.color,
+                                    count: group.servers.count,
+                                    isSelected: selectedGroupFilter?.id == group.id
+                                ) {
+                                    selectedGroupFilter = group
+                                    selectedTagFilter = nil
+                                }
+                            }
+                        }
+                    }
+
+                    // Tags Section
+                    if !allTags.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("TAGS")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 14)
+                                .padding(.top, 12)
+
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 6) {
+                                    ForEach(allTags, id: \.self) { tag in
+                                        TagFilterChip(
+                                            name: tag,
+                                            isSelected: selectedTagFilter == tag
+                                        ) {
+                                            if selectedTagFilter == tag {
+                                                selectedTagFilter = nil
+                                            } else {
+                                                selectedTagFilter = tag
+                                                selectedGroupFilter = nil
+                                            }
+                                        }
+                                    }
+                                }
+                                .padding(.horizontal, 14)
+                            }
+                        }
+                    }
+
                     // Quick Access Section
                     VStack(alignment: .leading, spacing: 2) {
                         HStack {
                             Text("QUICK ACCESS")
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundStyle(.secondary)
-                            
+
                             Spacer()
-                            
+
                             Button(action: onCustomizeQuickAccess) {
                                 Image(systemName: "ellipsis.circle")
                                     .font(.system(size: 12))
@@ -212,7 +527,7 @@ struct SidebarView: View {
                         .padding(.horizontal, 14)
                         .padding(.top, 16)
                         .padding(.bottom, 4)
-                        
+
                         ForEach(quickAccessItems) { item in
                             NavigationItemView(
                                 section: item.destination,
@@ -224,21 +539,21 @@ struct SidebarView: View {
                 }
                 .padding(.vertical, 8)
             }
-            
+
             Spacer()
-            
+
             // Server Status Metrics (Bottom)
             VStack(spacing: 0) {
                 Divider()
-                
+
                 VStack(spacing: 6) {
                     HStack {
                         Text("SERVER STATUS")
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(.secondary)
-                        
+
                         Spacer()
-                        
+
                         if isMonitoring {
                             HStack(spacing: 3) {
                                 Circle()
@@ -250,13 +565,13 @@ struct SidebarView: View {
                             }
                         }
                     }
-                    
+
                     HStack(spacing: 8) {
                         StatusBadge(count: onlineCount, color: .green, label: "Online")
                         StatusBadge(count: offlineCount, color: .red, label: "Offline")
                         StatusBadge(count: warningCount, color: .orange, label: "Warning")
                     }
-                    
+
                     HStack(spacing: 6) {
                         Button(action: onToggleMonitoring) {
                             Label(
@@ -268,7 +583,7 @@ struct SidebarView: View {
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
-                        
+
                         Button(action: onAddServer) {
                             Label("Add", systemImage: "plus")
                                 .font(.system(size: 11, weight: .medium))
@@ -283,6 +598,81 @@ struct SidebarView: View {
             .background(Color(nsColor: .controlBackgroundColor))
         }
         .background(Color(nsColor: .windowBackgroundColor).opacity(0.95))
+    }
+}
+
+// MARK: - Group Filter Item
+
+struct GroupFilterItem: View {
+    let name: String
+    let icon: String
+    let color: Color
+    let count: Int
+    let isSelected: Bool
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(isSelected ? .white : color)
+                    .frame(width: 16)
+
+                Text(name)
+                    .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                    .foregroundStyle(isSelected ? .white : .primary)
+
+                Spacer()
+
+                Text("\(count)")
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .foregroundStyle(isSelected ? .white.opacity(0.8) : .secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule()
+                            .fill(isSelected ? Color.white.opacity(0.2) : Color.secondary.opacity(0.15))
+                    )
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(isSelected ? color : (isHovered ? Color(nsColor: .controlBackgroundColor) : Color.clear))
+            )
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 6)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+    }
+}
+
+// MARK: - Tag Filter Chip
+
+struct TagFilterChip: View {
+    let name: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(name)
+                .font(.system(size: 10, weight: .medium))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(
+                    Capsule()
+                        .fill(isSelected ? Color.accentColor : Color.secondary.opacity(0.15))
+                )
+                .foregroundStyle(isSelected ? .white : .primary)
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -380,14 +770,71 @@ struct NavigationContentView: View {
                                 ServerListItemView(server: server)
                             }
                             .contextMenu {
-                                Button("Check Now") {
+                                Button {
                                     Task {
                                         await monitoringService.checkServer(server)
                                     }
+                                } label: {
+                                    Label("Check Now", systemImage: "arrow.clockwise")
                                 }
+
                                 Divider()
-                                Button("Delete", role: .destructive) {
+
+                                Button {
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(server.host, forType: .string)
+                                } label: {
+                                    Label("Copy Host", systemImage: "doc.on.doc")
+                                }
+
+                                Button {
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString("\(server.host):\(server.port)", forType: .string)
+                                } label: {
+                                    Label("Copy Host:Port", systemImage: "doc.on.doc")
+                                }
+
+                                if server.serverType == .https || server.serverType == .http {
+                                    Button {
+                                        let urlString = server.serverType == .https
+                                            ? "https://\(server.host):\(server.port)"
+                                            : "http://\(server.host):\(server.port)"
+                                        if let url = URL(string: urlString) {
+                                            NSWorkspace.shared.open(url)
+                                        }
+                                    } label: {
+                                        Label("Open in Browser", systemImage: "safari")
+                                    }
+                                }
+
+                                if server.serverType == .ssh || server.hasStoredCredentials {
+                                    Button {
+                                        let script = "tell application \"Terminal\" to do script \"ssh \(server.host) -p \(server.port)\""
+                                        if let appleScript = NSAppleScript(source: script) {
+                                            var error: NSDictionary?
+                                            appleScript.executeAndReturnError(&error)
+                                        }
+                                    } label: {
+                                        Label("Open SSH in Terminal", systemImage: "terminal")
+                                    }
+                                }
+
+                                Divider()
+
+                                if let data = ExportService.shared.exportToJSON([server]) {
+                                    Button {
+                                        ExportService.shared.saveToFile(data, format: .json, defaultName: server.name)
+                                    } label: {
+                                        Label("Export Server", systemImage: "square.and.arrow.up")
+                                    }
+                                }
+
+                                Divider()
+
+                                Button(role: .destructive) {
                                     deleteServer(server)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
                                 }
                             }
                         }
@@ -1024,7 +1471,7 @@ struct MemoryUsageChartView: View {
 
 struct ServerStatusCardView: View {
     let server: Server
-    
+
     var body: some View {
         HStack(spacing: 12) {
             // Status indicator
@@ -1032,36 +1479,36 @@ struct ServerStatusCardView: View {
                 Circle()
                     .fill(Color(server.status.color).opacity(0.15))
                     .frame(width: 44, height: 44)
-                
+
                 Image(systemName: server.serverType.iconName)
                     .font(.system(size: 16, weight: .medium))
                     .foregroundStyle(Color(server.status.color))
             }
-            
+
             VStack(alignment: .leading, spacing: 3) {
                 Text(server.name)
                     .font(.system(size: 14, weight: .semibold))
                     .lineLimit(1)
-                
+
                 HStack(spacing: 4) {
                     Circle()
                         .fill(Color(server.status.color))
                         .frame(width: 6, height: 6)
-                    
+
                     Text(server.status.rawValue.uppercased())
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Color(server.status.color))
                 }
-                
+
                 if let responseTime = server.responseTime {
                     Text("\(Int(responseTime))ms")
                         .font(.system(size: 10))
                         .foregroundStyle(.tertiary)
                 }
             }
-            
+
             Spacer()
-            
+
             // Quick metrics
             if let latestMetric = server.metrics.last {
                 VStack(alignment: .trailing, spacing: 4) {
@@ -1074,7 +1521,7 @@ struct ServerStatusCardView: View {
                         }
                         .foregroundStyle(.blue)
                     }
-                    
+
                     if let memory = latestMetric.memoryUsage {
                         HStack(spacing: 3) {
                             Image(systemName: "memorychip")
@@ -1097,6 +1544,190 @@ struct ServerStatusCardView: View {
             RoundedRectangle(cornerRadius: 10)
                 .stroke(Color.primary.opacity(0.1), lineWidth: 0.5)
         )
+    }
+}
+
+// MARK: - Export Options View
+
+struct ExportOptionsView: View {
+    let servers: [Server]
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedFormat: ExportFormat = .json
+
+    var body: some View {
+        VStack(spacing: 20) {
+            // Header
+            HStack {
+                Image(systemName: "square.and.arrow.up")
+                    .font(.title2)
+                    .foregroundStyle(.blue)
+                Text("Export Servers")
+                    .font(.title2.bold())
+                Spacer()
+            }
+
+            // Server count
+            HStack {
+                Image(systemName: "server.rack")
+                    .foregroundStyle(.secondary)
+                Text("\(servers.count) server(s) will be exported")
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+
+            Divider()
+
+            // Format selection
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Export Format")
+                    .font(.headline)
+
+                Picker("Format", selection: $selectedFormat) {
+                    ForEach(ExportFormat.allCases, id: \.self) { format in
+                        Text(format.rawValue).tag(format)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Text(formatDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            // Actions
+            HStack {
+                Button("Cancel") {
+                    dismiss()
+                }
+                .keyboardShortcut(.escape)
+
+                Spacer()
+
+                Button("Export") {
+                    exportServers()
+                }
+                .keyboardShortcut(.return)
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(24)
+        .frame(width: 400, height: 280)
+    }
+
+    private var formatDescription: String {
+        switch selectedFormat {
+        case .json:
+            return "JSON format is ideal for importing into other applications or backing up server configurations."
+        case .csv:
+            return "CSV format can be opened in spreadsheet applications like Excel or Numbers."
+        }
+    }
+
+    private func exportServers() {
+        if let data = ExportService.shared.exportServers(servers, format: selectedFormat) {
+            ExportService.shared.saveToFile(data, format: selectedFormat)
+        }
+        dismiss()
+    }
+}
+
+// MARK: - Bulk Move to Group View
+
+struct BulkMoveToGroupView: View {
+    let servers: [Server]
+    let groups: [ServerGroup]
+    let onComplete: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @State private var selectedGroup: ServerGroup?
+    @State private var removeFromGroup = false
+
+    var body: some View {
+        VStack(spacing: 20) {
+            // Header
+            HStack {
+                Image(systemName: "folder")
+                    .font(.title2)
+                    .foregroundStyle(.blue)
+                Text("Move to Group")
+                    .font(.title2.bold())
+                Spacer()
+            }
+
+            // Server count
+            HStack {
+                Image(systemName: "server.rack")
+                    .foregroundStyle(.secondary)
+                Text("\(servers.count) server(s) selected")
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+
+            Divider()
+
+            // Group selection
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Select Group")
+                    .font(.headline)
+
+                if groups.isEmpty {
+                    Text("No groups available. Create a group first in Settings.")
+                        .foregroundStyle(.secondary)
+                        .font(.caption)
+                } else {
+                    Picker("Group", selection: $selectedGroup) {
+                        Text("No Group").tag(nil as ServerGroup?)
+                        ForEach(groups) { group in
+                            HStack {
+                                Image(systemName: group.iconName)
+                                    .foregroundStyle(group.color)
+                                Text(group.name)
+                            }
+                            .tag(group as ServerGroup?)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+
+                Toggle("Remove from current group (set to no group)", isOn: $removeFromGroup)
+                    .font(.caption)
+            }
+
+            Spacer()
+
+            // Actions
+            HStack {
+                Button("Cancel") {
+                    dismiss()
+                }
+                .keyboardShortcut(.escape)
+
+                Spacer()
+
+                Button("Move") {
+                    moveServers()
+                }
+                .keyboardShortcut(.return)
+                .buttonStyle(.borderedProminent)
+                .disabled(selectedGroup == nil && !removeFromGroup)
+            }
+        }
+        .padding(24)
+        .frame(width: 400, height: 320)
+    }
+
+    private func moveServers() {
+        for server in servers {
+            if removeFromGroup {
+                server.group = nil
+            } else if let group = selectedGroup {
+                server.group = group
+            }
+        }
+        dismiss()
+        onComplete()
     }
 }
 

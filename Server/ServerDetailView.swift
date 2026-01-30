@@ -16,14 +16,26 @@ struct ServerDetailView: View {
     enum DetailTab: String, CaseIterable {
         case overview = "Overview"
         case metrics = "Metrics"
+        case history = "History"
+        case ssl = "SSL"
         case logs = "Logs"
-        
+
         var icon: String {
             switch self {
             case .overview: return "info.circle"
             case .metrics: return "chart.xyaxis.line"
+            case .history: return "clock.arrow.circlepath"
+            case .ssl: return "lock.fill"
             case .logs: return "list.bullet.rectangle"
             }
+        }
+    }
+
+    var availableTabs: [DetailTab] {
+        if server.supportsSSL {
+            return DetailTab.allCases
+        } else {
+            return DetailTab.allCases.filter { $0 != .ssl }
         }
     }
     
@@ -37,22 +49,30 @@ struct ServerDetailView: View {
             
             // Tab Picker
             Picker("View", selection: $selectedTab) {
-                ForEach(DetailTab.allCases, id: \.self) { tab in
+                ForEach(availableTabs, id: \.self) { tab in
                     Label(tab.rawValue, systemImage: tab.icon)
                         .tag(tab)
                 }
             }
             .pickerStyle(.segmented)
             .padding()
-            
+
             // Content
             TabView(selection: $selectedTab) {
                 ServerOverviewView(server: server)
                     .tag(DetailTab.overview)
-                
+
                 ServerMetricsView(server: server)
                     .tag(DetailTab.metrics)
-                
+
+                HistoricalChartsView(server: server)
+                    .tag(DetailTab.history)
+
+                if server.supportsSSL {
+                    SSLCertificateView(server: server)
+                        .tag(DetailTab.ssl)
+                }
+
                 ServerLogsView(server: server)
                     .tag(DetailTab.logs)
             }
@@ -110,7 +130,7 @@ struct ServerDetailHeaderView: View {
             Spacer()
             
             // Quick stats
-            HStack(spacing: 16) {
+            HStack(spacing: 20) {
                 if let responseTime = server.responseTime {
                     VStack(alignment: .trailing, spacing: 2) {
                         Text("\(Int(responseTime))ms")
@@ -120,12 +140,26 @@ struct ServerDetailHeaderView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                
-                if let uptime = server.uptime {
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(formatUptime(uptime))
-                            .font(.system(size: 20, weight: .bold, design: .rounded))
-                        Text("Uptime")
+
+                // Uptime percentage
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(server.formattedUptimePercentage)
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .foregroundStyle(uptimeColor(for: server.uptimePercentage))
+                    Text("Uptime")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+
+                // Current streak
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(server.formattedCurrentStreak)
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(Color(server.status.color))
+                            .frame(width: 6, height: 6)
+                        Text("Streak")
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
                     }
@@ -153,11 +187,23 @@ struct ServerDetailHeaderView: View {
             return "\(hours)h"
         }
     }
+
+    private func uptimeColor(for percentage: Double) -> Color {
+        switch percentage {
+        case 99.9...: return .green
+        case 99.0..<99.9: return .mint
+        case 95.0..<99.0: return .yellow
+        case 90.0..<95.0: return .orange
+        default: return .red
+        }
+    }
 }
 
 struct ServerOverviewView: View {
-    let server: Server
-    
+    @Bindable var server: Server
+    @State private var selectedUptimePeriod: UptimePeriod = .day
+    @State private var showingCredentialsEditor = false
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -171,7 +217,104 @@ struct ServerOverviewView: View {
                     }
                     .padding(8)
                 }
-                
+
+                // Uptime Statistics
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 16) {
+                        // Period selector
+                        HStack {
+                            Text("Time Period:")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                            Picker("Period", selection: $selectedUptimePeriod) {
+                                ForEach(UptimePeriod.allCases, id: \.self) { period in
+                                    Text(period.rawValue).tag(period)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(maxWidth: 400)
+                        }
+
+                        let stats = server.uptimeStats(for: selectedUptimePeriod)
+
+                        // Uptime gauge and stats
+                        HStack(spacing: 30) {
+                            // Large uptime gauge
+                            VStack(spacing: 8) {
+                                ZStack {
+                                    Circle()
+                                        .stroke(Color.gray.opacity(0.2), lineWidth: 10)
+
+                                    Circle()
+                                        .trim(from: 0, to: stats.uptimePercentage / 100)
+                                        .stroke(
+                                            uptimeGradient(for: stats.uptimePercentage),
+                                            style: StrokeStyle(lineWidth: 10, lineCap: .round)
+                                        )
+                                        .rotationEffect(.degrees(-90))
+
+                                    VStack(spacing: 2) {
+                                        Text(String(format: "%.2f", stats.uptimePercentage))
+                                            .font(.system(size: 28, weight: .bold, design: .rounded))
+                                        Text("%")
+                                            .font(.system(size: 14, weight: .medium))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                .frame(width: 100, height: 100)
+
+                                Text("Uptime")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            // Stats breakdown
+                            VStack(alignment: .leading, spacing: 12) {
+                                UptimeStatRow(
+                                    icon: "checkmark.circle.fill",
+                                    color: .green,
+                                    label: "Online",
+                                    value: formatDuration(stats.totalOnlineSeconds)
+                                )
+
+                                UptimeStatRow(
+                                    icon: "xmark.circle.fill",
+                                    color: .red,
+                                    label: "Offline",
+                                    value: formatDuration(stats.totalOfflineSeconds)
+                                )
+
+                                UptimeStatRow(
+                                    icon: "clock.fill",
+                                    color: .blue,
+                                    label: "Current Streak",
+                                    value: "\(stats.formattedStreak) (\(stats.currentStreakStatus.rawValue))"
+                                )
+
+                                if let lastChange = stats.lastStatusChange {
+                                    UptimeStatRow(
+                                        icon: "arrow.triangle.2.circlepath",
+                                        color: .purple,
+                                        label: "Last Change",
+                                        value: lastChange.formatted(date: .abbreviated, time: .shortened)
+                                    )
+                                }
+                            }
+                        }
+                        .padding(.top, 8)
+                    }
+                    .padding(8)
+                } label: {
+                    Label("Uptime Statistics", systemImage: "chart.bar.fill")
+                }
+
+                // Credentials Section (for servers that support it)
+                if server.supportsCredentials {
+                    CredentialsSummaryView(server: server) {
+                        showingCredentialsEditor = true
+                    }
+                }
+
                 // Notes
                 GroupBox("Notes") {
                     if server.notes.isEmpty {
@@ -186,7 +329,7 @@ struct ServerOverviewView: View {
                             .padding(8)
                     }
                 }
-                
+
                 // Recent Metrics Summary
                 if let latestMetric = server.metrics.sorted(by: { $0.timestamp > $1.timestamp }).first {
                     GroupBox("Latest Metrics") {
@@ -206,6 +349,63 @@ struct ServerOverviewView: View {
                 }
             }
             .padding()
+        }
+        .sheet(isPresented: $showingCredentialsEditor) {
+            CredentialsEditorView(server: server)
+        }
+    }
+
+    private func uptimeGradient(for percentage: Double) -> LinearGradient {
+        let color: Color
+        switch percentage {
+        case 99.9...: color = .green
+        case 99.0..<99.9: color = .mint
+        case 95.0..<99.0: color = .yellow
+        case 90.0..<95.0: color = .orange
+        default: color = .red
+        }
+        return LinearGradient(
+            colors: [color, color.opacity(0.7)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private func formatDuration(_ seconds: Double) -> String {
+        guard seconds > 0 else { return "0m" }
+        let days = Int(seconds) / 86400
+        let hours = (Int(seconds) % 86400) / 3600
+        let minutes = (Int(seconds) % 3600) / 60
+
+        if days > 0 {
+            return "\(days)d \(hours)h \(minutes)m"
+        } else if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        } else {
+            return "\(minutes)m"
+        }
+    }
+}
+
+struct UptimeStatRow: View {
+    let icon: String
+    let color: Color
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .foregroundStyle(color)
+                .frame(width: 16)
+
+            Text(label)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .frame(width: 100, alignment: .leading)
+
+            Text(value)
+                .font(.system(size: 12, weight: .medium))
         }
     }
 }
@@ -402,32 +602,207 @@ struct ServerLogsView: View {
 
 struct LogItemView: View {
     let log: ServerLog
-    
+
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: log.level.iconName)
                 .foregroundStyle(Color(log.level.color))
                 .font(.system(size: 14, weight: .semibold))
                 .frame(width: 20)
-            
+
             VStack(alignment: .leading, spacing: 3) {
                 HStack {
                     Text(log.level.rawValue.uppercased())
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(Color(log.level.color))
-                    
+
                     Spacer()
-                    
+
                     Text(log.timestamp, style: .time)
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                 }
-                
+
                 Text(log.message)
                     .font(.system(size: 12))
                     .foregroundStyle(.primary)
             }
         }
         .padding(.vertical, 6)
+    }
+}
+
+// MARK: - SSL Certificate View
+
+struct SSLCertificateView: View {
+    let server: Server
+    @State private var isRefreshing = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                if let cert = server.sslCertificate {
+                    // Status Card
+                    SSLStatusCard(certificate: cert)
+
+                    // Certificate Details
+                    GroupBox {
+                        VStack(alignment: .leading, spacing: 12) {
+                            SSLInfoRow(label: "Common Name", value: cert.commonName ?? "N/A")
+                            SSLInfoRow(label: "Issuer", value: cert.issuer ?? "N/A")
+                            SSLInfoRow(label: "Valid From", value: cert.formattedValidFrom)
+                            SSLInfoRow(label: "Valid Until", value: cert.formattedValidUntil)
+                            SSLInfoRow(label: "Days Until Expiry", value: "\(cert.daysUntilExpiry) days")
+
+                            if let serial = cert.serialNumber {
+                                SSLInfoRow(label: "Serial Number", value: serial)
+                            }
+
+                            if cert.isSelfSigned {
+                                HStack {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .foregroundStyle(.orange)
+                                    Text("Self-signed certificate")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(.orange)
+                                }
+                                .padding(.top, 4)
+                            }
+                        }
+                        .padding(8)
+                    } label: {
+                        Label("Certificate Details", systemImage: "doc.text.fill")
+                    }
+
+                    // Last Checked Info
+                    if let lastChecked = server.sslLastChecked {
+                        HStack {
+                            Text("Last checked:")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(lastChecked.formatted(date: .abbreviated, time: .shortened))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } else {
+                    // No Certificate Info
+                    ContentUnavailableView(
+                        "No Certificate Data",
+                        systemImage: "lock.slash",
+                        description: Text("SSL certificate information will appear here after the next monitoring check")
+                    )
+                }
+
+                // Refresh Button
+                HStack {
+                    Spacer()
+                    Button {
+                        refreshCertificate()
+                    } label: {
+                        Label("Refresh Certificate", systemImage: "arrow.clockwise")
+                    }
+                    .disabled(isRefreshing)
+                }
+            }
+            .padding()
+        }
+    }
+
+    private func refreshCertificate() {
+        isRefreshing = true
+        Task {
+            let result = await SSLCertificateService.shared.checkCertificate(host: server.host, port: server.port)
+            if case .success(let certInfo) = result {
+                server.updateSSLCertificate(certInfo)
+            }
+            isRefreshing = false
+        }
+    }
+}
+
+struct SSLStatusCard: View {
+    let certificate: SSLCertificateInfo
+
+    var body: some View {
+        HStack(spacing: 16) {
+            // Status Icon
+            ZStack {
+                Circle()
+                    .fill(Color(certificate.expiryStatus.color).opacity(0.15))
+                    .frame(width: 60, height: 60)
+
+                Image(systemName: certificate.expiryStatus.icon)
+                    .font(.system(size: 28))
+                    .foregroundStyle(Color(certificate.expiryStatus.color))
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(certificate.expiryStatus.rawValue)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(Color(certificate.expiryStatus.color))
+
+                if certificate.isExpired {
+                    Text("Certificate has expired!")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.red)
+                } else if certificate.daysUntilExpiry <= 7 {
+                    Text("Expires in \(certificate.daysUntilExpiry) day\(certificate.daysUntilExpiry == 1 ? "" : "s")!")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.red)
+                } else if certificate.daysUntilExpiry <= 30 {
+                    Text("Expires in \(certificate.daysUntilExpiry) days")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.orange)
+                } else {
+                    Text("Valid for \(certificate.daysUntilExpiry) more days")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                }
+
+                Text(certificate.commonName ?? "Unknown")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+            }
+
+            Spacer()
+
+            // Days counter
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(max(0, certificate.daysUntilExpiry))")
+                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(certificate.expiryStatus.color))
+                Text("days left")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(nsColor: .controlBackgroundColor))
+                .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)
+        )
+    }
+}
+
+struct SSLInfoRow: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack {
+            Text(label)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .frame(width: 120, alignment: .leading)
+
+            Text(value)
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            Spacer()
+        }
     }
 }

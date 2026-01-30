@@ -5,55 +5,126 @@
 ```
 Server/
 ├── App Entry
-│   └── ServerApp.swift                    ✅ Updated - Main app with SwiftData config
+│   └── ServerApp.swift                    ✅ Main app with SwiftData + MenuBarExtra
 │
 ├── Models (SwiftData)
-│   ├── Server.swift                       ✅ New - Server entity with status
-│   ├── ServerMetric.swift                 ✅ New - Performance metrics
-│   ├── ServerLog.swift                    ✅ New - Log entries
+│   ├── Server.swift                       ✅ Server entity with uptime & SSL
+│   ├── ServerMetric.swift                 ✅ Performance metrics
+│   ├── ServerLog.swift                    ✅ Log entries
+│   ├── ServerGroup.swift                  ✅ Server groups/tags
+│   ├── AlertThreshold.swift               ✅ Custom alert thresholds
+│   ├── UptimeRecord.swift                 ✅ Historical uptime records
+│   ├── ServerTemplate.swift               ✅ NEW - Server templates
+│   ├── MaintenanceWindow.swift            ✅ NEW - Maintenance windows
+│   ├── AppModel.swift                     📦 App state model
 │   └── Item.swift                         📦 Legacy - Template model
 │
 ├── Views
-│   ├── DashboardView.swift                ✅ New - Main dashboard (REPLACES ContentView)
-│   ├── ServerListItemView.swift           ✅ New - Server row component
-│   ├── ServerDetailView.swift             ✅ New - Detail with tabs
-│   ├── AddServerView.swift                ✅ New - Add server form
-│   ├── SettingsView.swift                 ✅ New - App settings
-│   ├── WelcomeView.swift                  ✅ New - First launch screen
-│   └── ContentView.swift                  📦 Legacy - Old template (updated for sample data)
+│   ├── DashboardView.swift                ✅ Main dashboard with search, bulk actions
+│   ├── ServerListItemView.swift           ✅ Server row component
+│   ├── ServerDetailView.swift             ✅ Detail with 5 tabs (Overview/Metrics/History/SSL/Logs)
+│   ├── AddServerView.swift                ✅ Add server form with templates
+│   ├── SettingsView.swift                 ✅ Settings with theme toggle
+│   ├── WelcomeView.swift                  ✅ First launch screen
+│   ├── GroupManagementView.swift          ✅ Group/tag management
+│   ├── AlertThresholdsView.swift          ✅ Threshold configuration
+│   ├── CredentialsView.swift              ✅ SSH credential management
+│   ├── MenuBarView.swift                  ✅ Menu bar popover
+│   ├── HistoricalChartsView.swift         ✅ NEW - Historical metrics charts
+│   ├── ServerTemplatesView.swift          ✅ NEW - Template selection UI
+│   ├── MaintenanceWindowsView.swift       ✅ NEW - Maintenance window management
+│   ├── ImportView.swift                   ✅ NEW - Server import UI
+│   ├── NetworkingView.swift               ✅ Network settings view
+│   ├── RolesAndFeaturesView.swift         ✅ Roles configuration
+│   ├── SecurityView.swift                 ✅ Security settings
+│   ├── StorageView.swift                  ✅ Storage overview
+│   ├── UpdatesView.swift                  ✅ Update management
+│   ├── QuickAccessCustomizationView.swift ✅ Quick access customization
+│   └── ContentView.swift                  📦 Legacy - Old template
 │
 ├── Services
-│   └── ServerMonitoringService.swift      ✅ New - Background monitoring
+│   ├── ServerMonitoringService.swift      ✅ Core monitoring (heavily enhanced)
+│   ├── NotificationService.swift          ✅ macOS notifications
+│   ├── SSLCertificateService.swift        ✅ SSL certificate checking
+│   ├── SSHMetricsService.swift            ✅ Real metrics via SSH
+│   ├── KeychainService.swift              ✅ Secure credential storage
+│   └── ExportService.swift                ✅ NEW - JSON/CSV export & import
 │
 ├── Utilities
-│   └── SampleData.swift                   ✅ New - Test data generator
+│   └── SampleData.swift                   ✅ Test data generator
 │
 └── Documentation
     ├── README.md                          📄 Project overview
-    └── GETTING_STARTED.md                 📄 Setup guide
+    ├── FILE_STRUCTURE.md                  📄 This file
+    ├── NEW_FEATURES.md                    📄 NEW - Feature documentation
+    ├── ROADMAP.md                         📄 NEW - Future feature plans
+    ├── GETTING_STARTED.md                 📄 Setup guide
+    ├── IMPLEMENTATION_SUMMARY.md          📄 Implementation details
+    ├── QUICK_START_GUIDE.md               📄 Quick start
+    ├── QUICK_REFERENCE_DETAILPAGE.md      📄 Detail page reference
+    ├── DEMO_DATA_REFERENCE.md             📄 Demo data info
+    ├── LAYOUT_FIX_SUMMARY.md              📄 Layout fixes
+    └── SCROLLVIEW_WIDTH_FIX.md            📄 ScrollView fixes
 
-Total: 16 files (13 Swift + 2 Markdown + 1 legacy)
+Total: 38+ Swift files in Server module
 ```
+
+## 🆕 New Files (Recent Implementation)
+
+### Models
+| File | Purpose |
+|------|---------|
+| `ServerGroup.swift` | Server organization with groups and tags |
+| `AlertThreshold.swift` | Custom metric threshold definitions |
+| `UptimeRecord.swift` | Historical status for uptime calculations |
+| `ServerTemplate.swift` | Predefined server configurations |
+| `MaintenanceWindow.swift` | Scheduled maintenance periods |
+
+### Views
+| File | Purpose |
+|------|---------|
+| `GroupManagementView.swift` | Create/edit/delete server groups |
+| `AlertThresholdsView.swift` | Configure alert thresholds per server |
+| `CredentialsView.swift` | Manage SSH credentials (Keychain) |
+| `MenuBarView.swift` | Menu bar quick status popover |
+| `HistoricalChartsView.swift` | Time-based metrics visualization |
+| `ServerTemplatesView.swift` | Template selection grid |
+| `MaintenanceWindowsView.swift` | Maintenance window management |
+| `ImportView.swift` | Server import from JSON/CSV/SSH config |
+
+### Services
+| File | Purpose |
+|------|---------|
+| `NotificationService.swift` | macOS notification center integration |
+| `SSLCertificateService.swift` | SSL certificate validation & monitoring |
+| `SSHMetricsService.swift` | Real server metrics collection via SSH |
+| `KeychainService.swift` | Secure credential storage in Keychain |
+| `ExportService.swift` | JSON/CSV export and import parsing |
 
 ## 🎯 Primary Files to Know
 
 ### User Interface Entry Point
-**`DashboardView.swift`** - This is now your main view (not ContentView!)
+**`DashboardView.swift`** - Main view with server list and group filtering
 
 ### Data Models
-**`Server.swift`** - Everything about a server
-**`ServerMetric.swift`** - Performance data points
-**`ServerLog.swift`** - Log messages
+- **`Server.swift`** - Server entity (enhanced with uptime, SSL, credentials)
+- **`ServerGroup.swift`** - Groups and tags
+- **`AlertThreshold.swift`** - Alert configuration
+- **`UptimeRecord.swift`** - Status history
 
-### Core Functionality
-**`ServerMonitoringService.swift`** - Handles all monitoring logic
+### Core Services
+- **`ServerMonitoringService.swift`** - All monitoring logic
+- **`NotificationService.swift`** - Notification handling
+- **`SSLCertificateService.swift`** - Certificate checks
+- **`SSHMetricsService.swift`** - SSH-based metrics
+- **`KeychainService.swift`** - Credential management
 
 ## 🔄 Data Flow
 
 ```
 User Action (Add Server)
     ↓
-AddServerView
+AddServerView (with group/tag selection)
     ↓
 ModelContext.insert(server)
     ↓
@@ -62,8 +133,11 @@ SwiftData saves automatically
 @Query updates DashboardView
     ↓
 ServerMonitoringService checks server
-    ↓
-Creates ServerMetric & ServerLog
+    ├── Creates ServerMetric & ServerLog
+    ├── Creates UptimeRecord
+    ├── Checks AlertThresholds → NotificationService
+    ├── Checks SSL Certificate → SSLCertificateService
+    └── Collects Real Metrics → SSHMetricsService (if credentials)
     ↓
 ServerDetailView displays data
 ```
@@ -72,20 +146,55 @@ ServerDetailView displays data
 
 ```
 ServerApp (Entry Point)
-    └── WindowGroup
-        └── DashboardView
-            ├── NavigationSplitView (Sidebar)
-            │   ├── DashboardHeaderView (Stats)
-            │   └── List
-            │       └── ServerListItemView (Each Server)
-            │
-            └── NavigationSplitView (Detail)
-                └── ServerDetailView
-                    ├── ServerDetailHeaderView
-                    └── TabView
-                        ├── ServerOverviewView
-                        ├── ServerMetricsView (with Charts)
-                        └── ServerLogsView
+    ├── WindowGroup
+    │   └── DashboardView
+    │       ├── NavigationSplitView (Sidebar)
+    │       │   ├── DashboardHeaderView (Stats + Group Filter)
+    │       │   └── List
+    │       │       └── ServerListItemView (Each Server)
+    │       │
+    │       └── NavigationSplitView (Detail)
+    │           └── ServerDetailView
+    │               ├── ServerDetailHeaderView (+ CredentialsBadge)
+    │               └── TabView
+    │                   ├── ServerOverviewView (+ CredentialsSummaryView)
+    │                   ├── ServerMetricsView (with Charts)
+    │                   ├── ServerLogsView
+    │                   └── SSLCertificateView
+    │
+    ├── MenuBarExtra
+    │   └── MenuBarView
+    │       ├── QuickStatView
+    │       └── MenuBarServerRow
+    │
+    └── Settings
+        └── SettingsView
+            ├── GeneralSettingsView
+            ├── NotificationSettingsView
+            ├── AlertSettingsView
+            └── DataSettingsView
+```
+
+## 🔐 Security Architecture
+
+```
+Credential Storage Flow:
+    User Input → CredentialsEditorView
+        ↓
+    ServerCredentials struct
+        ↓
+    KeychainService.saveCredentials()
+        ↓
+    macOS Keychain (encrypted)
+
+Credential Usage Flow:
+    ServerMonitoringService
+        ↓
+    server.loadCredentials() → KeychainService
+        ↓
+    SSHMetricsService.collectMetrics()
+        ↓
+    Real server metrics
 ```
 
 ## 🎨 Customization Points
@@ -112,18 +221,29 @@ ServerApp (Entry Point)
 - File: `ServerMonitoringService.swift`
 - Function: `checkServer(_:)`
 
-**Sample Data**
-- File: `SampleData.swift`
-- Function: `createSampleServers(in:)`
+**Notifications**
+- File: `NotificationService.swift`
+- Functions: `notifyServerStatusChange`, `notifyThresholdExceeded`
+
+**Alert Thresholds**
+- File: `AlertThreshold.swift`
+- Enum: `AlertMetricType`, `AlertSeverity`
+
+**SSH Metrics**
+- File: `SSHMetricsService.swift`
+- Function: `collectMetrics`
 
 ## 🚀 Build Order (What Depends on What)
 
 1. **Models** (No dependencies)
-   - Server.swift
-   - ServerMetric.swift
-   - ServerLog.swift
+   - Server.swift, ServerMetric.swift, ServerLog.swift
+   - ServerGroup.swift, AlertThreshold.swift, UptimeRecord.swift
 
 2. **Services** (Depends on Models)
+   - KeychainService.swift
+   - NotificationService.swift
+   - SSLCertificateService.swift
+   - SSHMetricsService.swift
    - ServerMonitoringService.swift
 
 3. **Utilities** (Depends on Models)
@@ -132,7 +252,10 @@ ServerApp (Entry Point)
 4. **Views** (Depends on Models + Services)
    - ServerListItemView.swift
    - AddServerView.swift
-   - WelcomeView.swift
+   - CredentialsView.swift
+   - GroupManagementView.swift
+   - AlertThresholdsView.swift
+   - MenuBarView.swift
    - ServerDetailView.swift
    - SettingsView.swift
    - DashboardView.swift
@@ -142,11 +265,9 @@ ServerApp (Entry Point)
 
 ## 📦 Safe to Delete
 
-These files are from the Xcode template and not used:
+These files are from templates and not actively used:
 - **Item.swift** (replaced by Server.swift)
 - **ContentView.swift** (replaced by DashboardView.swift)
-
-*Note: Don't delete them yet if you want to reference the old structure.*
 
 ## 🔍 Quick File Reference
 
@@ -158,23 +279,14 @@ These files are from the Xcode template and not used:
 | Update server card design | `ServerListItemView.swift` |
 | Add new metrics | `ServerMetric.swift` + `ServerDetailView.swift` |
 | Change log levels | `ServerLog.swift` (LogLevel enum) |
-| Customize welcome screen | `WelcomeView.swift` |
-| Add settings options | `SettingsView.swift` |
-| Create different sample data | `SampleData.swift` |
-
-## 🎭 Where Your Figma Components Will Go
-
-When you share your Figma exports, map them like this:
-
-| Your Figma Component | Replace This File |
-|---------------------|------------------|
-| Main Dashboard Screen | `DashboardView.swift` |
-| Server List Item | `ServerListItemView.swift` |
-| Server Detail Panel | `ServerDetailView.swift` |
-| Add Server Modal | `AddServerView.swift` |
-| Stats Cards | `DashboardHeaderView` in `DashboardView.swift` |
-| Metric Gauge | `MetricGaugeView` in `ServerDetailView.swift` |
-| Log Item | `LogItemView` in `ServerDetailView.swift` |
+| Customize notifications | `NotificationService.swift` |
+| Add threshold types | `AlertThreshold.swift` (AlertMetricType) |
+| Modify credential storage | `KeychainService.swift` |
+| Customize menu bar | `MenuBarView.swift` |
+| Add SSL checks | `SSLCertificateService.swift` |
+| Modify SSH metrics | `SSHMetricsService.swift` |
+| Create server groups | `GroupManagementView.swift` |
+| Configure alert thresholds | `AlertThresholdsView.swift` |
 
 ## 💡 Pro Tips
 
@@ -183,14 +295,33 @@ When you share your Figma exports, map them like this:
 3. **One File at a Time**: Replace components gradually
 4. **Keep Functionality**: When changing UI, keep `@Bindable`, `@Environment`, etc.
 5. **Test Frequently**: Run the app after each change
+6. **Check Keychain**: Use Keychain Access.app to verify credential storage
+7. **Test Notifications**: Use the test button in Settings → Notifications
 
-## 🏁 You're All Set!
+## 🏁 Current Status
 
-- ✅ 13 Swift files created
+- ✅ 38+ Swift files
+- ✅ 9 advanced features implemented
+- ✅ 6 quick win features implemented
+- ✅ 4 medium effort features implemented
 - ✅ Full SwiftData integration
-- ✅ Monitoring service working
-- ✅ Complete UI implemented
-- ✅ Sample data available
-- ✅ Documentation ready
+- ✅ Monitoring service with real ping
+- ✅ macOS notifications
+- ✅ Uptime tracking
+- ✅ Server groups/tags
+- ✅ Custom alert thresholds
+- ✅ SSL certificate monitoring
+- ✅ Menu bar quick access
+- ✅ Secure credential management
+- ✅ Real metrics via SSH
+- ✅ Historical charts with trends
+- ✅ Server templates (20 built-in)
+- ✅ Maintenance windows
+- ✅ Import from JSON/CSV/SSH config
+- ✅ Search/filter, bulk actions
+- ✅ Export to JSON/CSV
+- ✅ Keyboard shortcuts
+- ✅ Dark/Light theme toggle
+- ✅ Documentation updated
 
-**Next: Build and run to see your server monitor dashboard in action!** 🎉
+**Ready for production use!** 🎉
