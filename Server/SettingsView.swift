@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UserNotifications
 
 struct SettingsView: View {
     @AppStorage("monitoringInterval") private var monitoringInterval = 30

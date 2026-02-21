@@ -400,7 +400,7 @@ struct ImportView: View {
                 serverType: imported.serverType
             )
             server.notes = imported.notes
-            server.tags = imported.tags
+            server.tagNames = imported.tags.split(separator: ",").map { String($0.trimmingCharacters(in: .whitespaces)) }
 
             modelContext.insert(server)
         }

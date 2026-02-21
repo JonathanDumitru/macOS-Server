@@ -147,4 +147,16 @@ extension Color {
 
         return String(format: "%02X%02X%02X", r, g, b)
     }
+    
+    var hexString: String {
+        guard let components = NSColor(self).usingColorSpace(.deviceRGB) else {
+            return "007AFF"
+        }
+
+        let r = Int(components.redComponent * 255.0)
+        let g = Int(components.greenComponent * 255.0)
+        let b = Int(components.blueComponent * 255.0)
+
+        return String(format: "%02X%02X%02X", r, g, b)
+    }
 }
