@@ -7,9 +7,13 @@
 
 import Foundation
 import UserNotifications
+internal import Combine
+internal import Combine
 
 @MainActor
 class NotificationService: ObservableObject {
+    var objectWillChange: ObservableObjectPublisher
+
     static let shared = NotificationService()
 
     @Published var isAuthorized = false

@@ -18,6 +18,7 @@ final class ServerMetric {
     var networkIn: Double? // MB/s
     var networkOut: Double? // MB/s
     var activeConnections: Int?
+    var responseTime: Double? // milliseconds
     
     var server: Server?
     
@@ -29,7 +30,8 @@ final class ServerMetric {
         diskUsage: Double? = nil,
         networkIn: Double? = nil,
         networkOut: Double? = nil,
-        activeConnections: Int? = nil
+        activeConnections: Int? = nil,
+        responseTime: Double? = nil
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -39,5 +41,6 @@ final class ServerMetric {
         self.networkIn = networkIn
         self.networkOut = networkOut
         self.activeConnections = activeConnections
+        self.responseTime = responseTime
     }
 }

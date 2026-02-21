@@ -175,6 +175,7 @@ class KeychainService {
             if status == errSecItemNotFound {
                 // Item doesn't exist, create it
                 try saveCredentials(credentials, forServerID: serverID)
+                return
             } else {
                 throw KeychainError.updateFailed(status)
             }

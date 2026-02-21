@@ -7,6 +7,7 @@
 
 import Foundation
 import SwiftData
+import SwiftUI
 import Network
 internal import Combine
 
@@ -609,7 +610,7 @@ class ServerMonitoringService: ObservableObject {
         }
     }
 
-    private func categorizeNWError(_ error: NWError) -> String {
+    nonisolated private func categorizeNWError(_ error: NWError) -> String {
         switch error {
         case .posix(let code):
             switch code {
@@ -691,7 +692,7 @@ class ServerMonitoringService: ObservableObject {
         }
     }
 
-    private func parsePingTime(from output: String) -> Double? {
+    nonisolated private func parsePingTime(from output: String) -> Double? {
         // Parse "time=X.XXX ms" from ping output
         let pattern = #"time[=<](\d+\.?\d*)\s*ms"#
         if let regex = try? NSRegularExpression(pattern: pattern, options: []),
